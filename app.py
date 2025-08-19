@@ -1,12 +1,13 @@
 # app.py
 
 import streamlit as st
-from tools import floating_point
+from tools import floating_point, decimal_converter  
 
 # Define the available tools in a dictionary.
 # The key is the name displayed in the sidebar, and the value is the module.
 TOOLS = {
     "Floating-Point Converter": floating_point,
+    "Decimal Converter": decimal_converter, # <-- Add the new tool here
     # Future tools will be added here
     # "Binary Operations": binary_ops,
     # "Karnaugh Map": kmap,
