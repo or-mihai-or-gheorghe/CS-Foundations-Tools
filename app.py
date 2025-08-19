@@ -16,7 +16,7 @@ def main():
     
     st.sidebar.title("Navigation")
     
-    selection = st.sidebar.radio("Go to", list(TOOLS.keys()))
+    selection = st.sidebar.radio("Floating Point", list(TOOLS.keys()))
 
     tool_module = TOOLS[selection]
 

@@ -181,68 +181,49 @@ def perform_fp_addition(num_a_str, num_b_str, precision, input_type):
 
     # --- Step 3: Align Mantissas ---
     explanation.append("\n### 3. Align Mantissas")
-    
-    # We need to align based on actual exponents
-    if exp_a_val == 0 and exp_b_val == 0:
-        # Both denormalized, same exponent
-        exp_diff = 0
-        target_exp = 0
-        target_exp_unbiased = 1 - bias
-    elif exp_a_val == 0:
-        # A denormalized, B normalized
-        exp_diff = exp_b_val - 1
-        target_exp = exp_b_val
-        target_exp_unbiased = effective_exp_b
-    elif exp_b_val == 0:
-        # B denormalized, A normalized
-        exp_diff = 1 - exp_a_val
-        target_exp = exp_a_val
-        target_exp_unbiased = effective_exp_a
-    else:
-        # Both normalized
-        exp_diff = exp_a_val - exp_b_val
-        target_exp = max(exp_a_val, exp_b_val)
-        target_exp_unbiased = max(effective_exp_a, effective_exp_b)
-    
+
+    # Use unbiased effective exponents for all alignment logic
+    exp_diff_unbiased = effective_exp_a - effective_exp_b
+    target_exp_unbiased = max(effective_exp_a, effective_exp_b)
+
     # Extend mantissas with guard, round, and sticky bits
     guard_bits = 3  # Guard, Round, Sticky
     man_a_extended = man_a_full + '0' * guard_bits
     man_b_extended = man_b_full + '0' * guard_bits
-    
-    if exp_diff > 0:  # A's exponent is larger
-        shift_amount = exp_diff
+
+    if exp_diff_unbiased > 0:  # A's exponent is larger
+        shift_amount = exp_diff_unbiased
         explanation.append(f"- A's exponent ({effective_exp_a}) is larger than B's ({effective_exp_b}) by {shift_amount}")
         explanation.append(f"- Shift B's mantissa RIGHT by {shift_amount} positions")
         
         # Shift B right
         if shift_amount >= len(man_b_extended):
-            man_b_shifted = '0' * len(man_b_extended)
-            sticky = '1'  # All bits shifted out
+            man_b_shifted = '0' * (len(man_b_extended) - 1) + '1'  # Set sticky bit
+            explanation.append(f"- Complete shift out: sticky bit set to 1")
         else:
             shifted_out = man_b_extended[-shift_amount:] if shift_amount > 0 else ''
             man_b_shifted = ('0' * shift_amount) + man_b_extended[:-shift_amount]
-            sticky = '1' if '1' in shifted_out else '0'
-            if sticky == '1' and shift_amount > guard_bits:
+            if '1' in shifted_out:
                 # Set sticky bit in the result
                 man_b_shifted = man_b_shifted[:-1] + '1'
         
         man_a_aligned = man_a_extended
         man_b_aligned = man_b_shifted
         
-    elif exp_diff < 0:  # B's exponent is larger
-        shift_amount = -exp_diff
+    elif exp_diff_unbiased < 0:  # B's exponent is larger
+        shift_amount = -exp_diff_unbiased
         explanation.append(f"- B's exponent ({effective_exp_b}) is larger than A's ({effective_exp_a}) by {shift_amount}")
         explanation.append(f"- Shift A's mantissa RIGHT by {shift_amount} positions")
         
         # Shift A right
         if shift_amount >= len(man_a_extended):
-            man_a_shifted = '0' * len(man_a_extended)
-            sticky = '1'
+            man_a_shifted = '0' * (len(man_a_extended) - 1) + '1'  # Set sticky bit
+            explanation.append(f"- Complete shift out: sticky bit set to 1")
         else:
             shifted_out = man_a_extended[-shift_amount:] if shift_amount > 0 else ''
             man_a_shifted = ('0' * shift_amount) + man_a_extended[:-shift_amount]
-            sticky = '1' if '1' in shifted_out else '0'
-            if sticky == '1' and shift_amount > guard_bits:
+            if '1' in shifted_out:
+                # Set sticky bit in the result
                 man_a_shifted = man_a_shifted[:-1] + '1'
         
         man_a_aligned = man_a_shifted
@@ -312,30 +293,49 @@ def perform_fp_addition(num_a_str, num_b_str, precision, input_type):
         shift_left = leading_one_pos
         explanation.append(f"- Leading 1 at position {leading_one_pos}")
         explanation.append(f"- Shift mantissa LEFT by {shift_left} and decrement exponent by {shift_left}")
+        
+        # Handle sticky bit for discarded bits
+        lost = result_mantissa[:shift_left]
         result_mantissa = result_mantissa[shift_left:] + ('0' * shift_left)
-        target_exp -= shift_left
+        if '1' in lost:
+            # Force sticky bit = 1
+            result_mantissa = result_mantissa[:-1] + '1'
+            explanation.append(f"- Discarded bits contained 1: sticky bit set")
+        
+        target_exp_unbiased -= shift_left
     elif leading_one_pos == 0:
         explanation.append("- Mantissa already normalized (leading 1 at position 0)")
     
-    # Check for underflow/overflow
-    if target_exp <= 0:
-        # Underflow to denormalized or zero
-        explanation.append(f"- Exponent {target_exp} underflows")
-        if target_exp < (1 - params['man_bits']):
+    # Convert unbiased exponent to biased and handle underflow/overflow
+    exp_min = 1 - params['bias']  # Minimum normal exponent (unbiased)
+    exp_max = ((1 << params['exp_bits']) - 1) - params['bias']  # Maximum exponent (unbiased)
+
+    if target_exp_unbiased < exp_min:
+        # Underflow: may become denormalized or zero
+        explanation.append(f"- Unbiased exponent {target_exp_unbiased} < {exp_min}: underflow")
+        
+        # Shift right to make denormalized
+        denorm_shift = exp_min - target_exp_unbiased
+        explanation.append(f"- Shift right by {denorm_shift} to create denormalized number")
+        
+        if denorm_shift >= len(result_mantissa):
             # Complete underflow to zero
-            explanation.append("- Complete underflow: result rounds to zero")
+            explanation.append("- Complete underflow: result is zero")
             return ('0', '0' * params['exp_bits'], '0' * params['man_bits']), explanation
         else:
-            # Denormalized result
-            denorm_shift = 1 - target_exp
-            explanation.append(f"- Result is denormalized, shift right by {denorm_shift}")
+            # Create denormalized number
+            lost = result_mantissa[-denorm_shift:] if denorm_shift > 0 else ''
             result_mantissa = ('0' * denorm_shift) + result_mantissa[:-denorm_shift]
-            target_exp = 0
-    elif target_exp >= exp_max:
+            if '1' in lost:
+                result_mantissa = result_mantissa[:-1] + '1'  # Set sticky
+            target_exp = 0  # Denormalized numbers have biased exponent = 0
+    elif target_exp_unbiased > exp_max:
         # Overflow to infinity
-        explanation.append(f"- Exponent {target_exp} overflows")
-        explanation.append("- Result rounds to infinity")
+        explanation.append(f"- Unbiased exponent {target_exp_unbiased} > {exp_max}: overflow to infinity")
         return (result_sign, '1' * params['exp_bits'], '0' * params['man_bits']), explanation
+    else:
+        # Normal number
+        target_exp = target_exp_unbiased + params['bias']
 
     # --- Step 6: Round ---
     explanation.append("\n### 6. Round to Fit Precision")
@@ -353,24 +353,34 @@ def perform_fp_addition(num_a_str, num_b_str, precision, input_type):
     # Pad if necessary
     final_mantissa = (final_mantissa + '0' * params['man_bits'])[:params['man_bits']]
     
-    # Round to nearest even
-    if len(guard_round_sticky) >= 2:
+    # Round to nearest even (IEEE 754)
+    if len(guard_round_sticky) >= 1:
         guard = guard_round_sticky[0] if len(guard_round_sticky) > 0 else '0'
         round_bit = guard_round_sticky[1] if len(guard_round_sticky) > 1 else '0'
-        sticky = '1' if '1' in guard_round_sticky[2:] else '0' if len(guard_round_sticky) > 2 else '0'
+        sticky = '1' if '1' in guard_round_sticky[2:] else '0'
+        lsb = final_mantissa[-1] if final_mantissa else '0'
         
-        explanation.append(f"- Guard bit: {guard}, Round bit: {round_bit}, Sticky bit: {sticky}")
+        explanation.append(f"- Guard bit: {guard}, Round bit: {round_bit}, Sticky bit: {sticky}, LSB: {lsb}")
         
-        # Round to nearest, ties to even
-        if round_bit == '1' and (sticky == '1' or (sticky == '0' and guard == '0' and final_mantissa[-1] == '1')):
-            explanation.append("- Rounding up")
+        # IEEE 754 round-to-nearest-even
+        should_round_up = (guard == '1' and (round_bit == '1' or sticky == '1')) or \
+                        (guard == '1' and round_bit == '0' and sticky == '0' and lsb == '1')
+        
+        if should_round_up:
+            explanation.append("- Rounding up (round-to-nearest-even)")
             # Add 1 to mantissa
             mantissa_int = int(final_mantissa, 2) + 1
             if mantissa_int >= (1 << params['man_bits']):
                 # Mantissa overflow after rounding
-                target_exp += 1
+                target_exp_unbiased += 1
                 final_mantissa = '0' * params['man_bits']
                 explanation.append("- Rounding caused mantissa overflow, increment exponent")
+                
+                # Check for overflow to infinity after rounding
+                exp_max = (1 << params['exp_bits']) - 1
+                if target_exp_unbiased > exp_max - params['bias']:
+                    explanation.append("- Exponent overflow after rounding: result is infinity")
+                    return (result_sign, '1' * params['exp_bits'], '0' * params['man_bits']), explanation
             else:
                 final_mantissa = format(mantissa_int, f'0{params["man_bits"]}b')
         else:
