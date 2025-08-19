@@ -1,8 +1,6 @@
 # tools/floating_point.py
 
 import streamlit as st
-import struct
-import math
 # Import the Decimal module for precise calculations
 from decimal import Decimal, getcontext
 

@@ -1,16 +1,13 @@
 # app.py
 
 import streamlit as st
-from tools import floating_point, decimal_converter  
+from tools import floating_point, decimal_converter, special_values
 
 # Define the available tools in a dictionary.
-# The key is the name displayed in the sidebar, and the value is the module.
 TOOLS = {
     "Floating-Point Converter": floating_point,
-    "Decimal Converter": decimal_converter, # <-- Add the new tool here
-    # Future tools will be added here
-    # "Binary Operations": binary_ops,
-    # "Karnaugh Map": kmap,
+    "Decimal Converter": decimal_converter,
+    "Special Values Explorer": special_values, # --- CHANGE 2: Add the new tool here ---
 }
 
 def main():
@@ -18,14 +15,10 @@ def main():
     
     st.sidebar.title("Navigation")
     
-    # Create a radio button in the sidebar to select the tool
     selection = st.sidebar.radio("Go to", list(TOOLS.keys()))
 
-    # Get the selected tool's module
     tool_module = TOOLS[selection]
 
-    # All tool modules should have a 'render' function
-    # This keeps the main app clean and delegates rendering to the tool module
     if hasattr(tool_module, 'render'):
         tool_module.render()
     else:
