@@ -1,13 +1,14 @@
 # app.py
 
 import streamlit as st
-from tools import floating_point, decimal_converter, special_values
+from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 
 # Define the available tools in a dictionary.
 TOOLS = {
     "Floating-Point Converter": floating_point,
     "Decimal Converter": decimal_converter,
-    "Special Values Explorer": special_values, # --- CHANGE 2: Add the new tool here ---
+    "Special Values Explorer": special_values,
+    "FP Arithmetic (+/-)": fp_arithmetic
 }
 
 def main():
