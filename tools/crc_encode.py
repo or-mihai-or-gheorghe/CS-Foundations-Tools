@@ -233,10 +233,45 @@ $$
         st.markdown(f"- **Dividend** (message with r zeros appended): `{_group_bits(results['dividend_bits'], 4)}`")
         st.markdown(f"- **Remainder** (length r): `{results['remainder_bits']}`")
 
-        if want_trace and results["trace_steps"]:
-            st.markdown("**Long-division trace (GF(2)):**")
-            for line in results["trace_steps"]:
-                st.code(line)
+        if want_trace:
+            st.markdown("#### Long-division trace:")
+            gen_bits = results["gen_bits"]
+            msg_bits = results["msg_bits"]
+            r        = results["r"]
+            k        = results["k"]
+
+            # Work buffer = dividend (message ∥ r zeros)
+            dividend_bits = results["dividend_bits"]           # as a string
+            work = np.array([int(b) for b in dividend_bits], dtype=int)
+            gen  = np.array([int(b) for b in gen_bits], dtype=int)
+            g_len = len(gen_bits)
+
+            lines = []
+            # Header like the example (show message and appended zeros separated by a space)
+            lines.append(f"M'(x) = {msg_bits} {'0'*r}")
+            lines.append(f" G(x) = {gen_bits}")
+            lines.append("")
+
+            # Show only the XOR steps where the leading bit at position i is 1
+            for i in range(k):
+                if work[i] == 1:
+                    # Current buffer before XOR
+                    current = "".join(str(b) for b in work.tolist())
+                    lines.append(f"{current} XOR")
+                    lines.append(f"{' ' * i}{gen_bits}")
+                    lines.append("-----------")
+                    # Apply XOR of generator aligned at i
+                    work[i:i+g_len] ^= gen
+
+            remainder = "".join(str(b) for b in work[k:].tolist())
+
+            # Final remainder line aligned under the remainder window
+            lines.append(f"{' ' * k}{remainder} => degree lower than G(x)")
+            lines.append(f"            => R(x) = {remainder}")
+            lines.append("")
+            lines.append(f"So C(x): {msg_bits} {remainder}")
+
+            st.code("\n".join(lines))
 
         # 4) Codeword and verification
         st.markdown("### 4) Codeword and verification")

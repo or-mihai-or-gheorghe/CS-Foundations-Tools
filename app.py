@@ -2,7 +2,7 @@
 
 import streamlit as st
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
-from tools import hamming_encode, hamming_decode, crc_encode
+from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
 
 # --- Data Structure for Tool Groups ---
 TOOL_GROUPS = {
@@ -16,7 +16,7 @@ TOOL_GROUPS = {
         "Hamming Encode": hamming_encode,
         "Hamming Decode & Correct": hamming_decode,
         "CRC Encode": crc_encode,
-        "CRC Decode": None
+        "CRC Decode": crc_decode,
     }
 }
 
@@ -29,8 +29,10 @@ ALL_TOOLS = {
 
 
 def main():
-    st.set_page_config(page_title="CS Fundamentals App", layout="wide")
+    st.set_page_config(page_title="CS Fundamentals - Bucharest University of Economic Studies", layout="wide")
     
+    st.sidebar.markdown("The Faculty of Economic Cybernetics, Statistics and Informatics")
+    st.sidebar.markdown("Bucharest University of Economic Studies")
     st.sidebar.title("CS Foundation Tools")
 
     # --- State Management for Unified Selection ---
@@ -79,7 +81,6 @@ def main():
             args=(radio_key,), # Pass the widget's own key to the callback
             label_visibility="collapsed"
         )
-        st.sidebar.markdown('<hr style="margin-top: 0; margin-bottom: 1rem;">', unsafe_allow_html=True)
 
 
     # --- Tool Rendering Logic ---
