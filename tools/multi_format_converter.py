@@ -22,6 +22,32 @@ getcontext().prec = 200
 
 # ------------------ small helpers ------------------
 
+def _byteswap_bits(bits: str) -> str:
+    """
+    Reverse the order of 8-bit bytes in a bitstring.
+    Left-pads to a whole number of bytes if needed.
+    """
+    if len(bits) % 8 != 0:
+        bits = "0" * (8 - (len(bits) % 8)) + bits
+    chunks = [bits[i:i+8] for i in range(0, len(bits), 8)]
+    chunks.reverse()
+    return "".join(chunks)
+
+def _bits_to_hex(bits: str) -> str:
+    """Convert bits (length multiple of 4) to upper-case hex, left-padded."""
+    if len(bits) % 4 != 0:
+        bits = "0" * (4 - (len(bits) % 4)) + bits
+    return format(int(bits, 2), f"0{len(bits)//4}X")
+
+def _hex_byteswap(hex_str: str) -> str:
+    """Reverse order of bytes in a hex string (2 hex chars per byte)."""
+    hs = hex_str.upper()
+    if len(hs) % 2 != 0:
+        hs = "0" + hs
+    pairs = [hs[i:i+2] for i in range(0, len(hs), 2)]
+    pairs.reverse()
+    return "".join(pairs)
+
 def _strip_ws_us(s: str) -> str:
     return s.replace(" ", "").replace("_", "")
 
@@ -291,8 +317,54 @@ def _update_all_views(val: int, width: int, ones_neg_zero: bool):
     st.session_state.mf_twos = _group_nibbles(twos_bits, pad_to=width)
     st.session_state.mf_twos_over = twos_over
 
-    # BCD
+    # BCD (sign as leading '-'; 4-bit per digit)
     st.session_state.mf_bcd = _int_to_bcd(val, neg_zero_flag=ones_neg_zero)
+
+    # -------- Byte-order (BE/LE) derived views --------
+    # We'll show binary/hex from the fixed-width encodings so endianness is meaningful.
+
+    # Two's complement bits (width bits) → Binary (BE/LE)
+    tw_be_bits = twos_bits  # already width bits
+    tw_le_bits = _byteswap_bits(tw_be_bits)
+    st.session_state.mf_bin_be = _group_nibbles(tw_be_bits, pad_to=width)
+    st.session_state.mf_bin_le = _group_nibbles(tw_le_bits, pad_to=width)
+
+    # Two's complement bits → Hex (BE/LE)
+    tw_be_hex = _bits_to_hex(tw_be_bits)
+    tw_le_hex = _hex_byteswap(tw_be_hex)
+    st.session_state.mf_hex_be = tw_be_hex
+    st.session_state.mf_hex_le = tw_le_hex
+
+    # One's complement bits (width bits) → BE/LE
+    on_be_bits = ones_bits
+    on_le_bits = _byteswap_bits(on_be_bits)
+    st.session_state.mf_ones_be = _group_nibbles(on_be_bits, pad_to=width)
+    st.session_state.mf_ones_le = _group_nibbles(on_le_bits, pad_to=width)
+
+    # Two's complement bits again for labeled BE/LE fields (explicit)
+    st.session_state.mf_twos_be = _group_nibbles(tw_be_bits, pad_to=width)
+    st.session_state.mf_twos_le = _group_nibbles(tw_le_bits, pad_to=width)
+
+    # Decimal duplicates (unaltered by endianness)
+    st.session_state.mf_dec_be = st.session_state.mf_dec
+    st.session_state.mf_dec_le = st.session_state.mf_dec
+
+    # BCD: pack to bits (4 per digit), then byte-swap for LE view (pad to full bytes on the left)
+    bcd_disp = st.session_state.mf_bcd  # like "- 0001 0010 ..."
+    sign_bcd = bcd_disp.strip().startswith("-")
+    bits_only = "".join(ch for ch in bcd_disp if ch in "01")
+    if bits_only:
+        if len(bits_only) % 8 != 0:
+            bits_only = "0" * (8 - (len(bits_only) % 8)) + bits_only
+        bcd_be_bits = bits_only
+        bcd_le_bits = _byteswap_bits(bits_only)
+        bcd_be = " ".join(bcd_be_bits[i:i+4] for i in range(0, len(bcd_be_bits), 4))
+        bcd_le = " ".join(bcd_le_bits[i:i+4] for i in range(0, len(bcd_le_bits), 4))
+    else:
+        bcd_be = bcd_le = "0000"
+    st.session_state.mf_bcd_be = ("-" if sign_bcd else "") + bcd_be
+    st.session_state.mf_bcd_le = ("-" if sign_bcd else "") + bcd_le
+
 
 # ------------------ UI ------------------
 
@@ -331,6 +403,18 @@ Type in **any** one of the boxes — all the others update instantly.
         "mf_bcd": "0000",
         "mf_ones_over": False,
         "mf_twos_over": False,
+        "mf_dec_be": "0",
+        "mf_dec_le": "0",
+        "mf_bin_be": "",
+        "mf_bin_le": "",
+        "mf_hex_be": "",
+        "mf_hex_le": "",
+        "mf_ones_be": "",
+        "mf_ones_le": "",
+        "mf_twos_be": "",
+        "mf_twos_le": "",
+        "mf_bcd_be": "",
+        "mf_bcd_le": "",
     }
     # set padded base defaults
     defaults["mf_bin"] = _format_bin_signed(0, width0)
@@ -382,3 +466,90 @@ Type in **any** one of the boxes — all the others update instantly.
     if messages:
         for m in messages:
             st.error(m)
+
+    st.markdown("---")
+    st.subheader("Byte-order views (read-only)")
+
+    be_col, le_col = st.columns(2)
+    with be_col:
+        st.caption("Big-endian (MSB-first byte order)")
+        st.text_input("Binary (2’s complement, BE)", key="mf_bin_be", disabled=True)
+        st.text_input("Hex (2’s complement, BE)", key="mf_hex_be", disabled=True)
+        st.text_input("BCD (packed, BE)", key="mf_bcd_be", disabled=True)
+
+    with le_col:
+        st.caption("Little-endian (bytes reversed)")
+        st.text_input("Binary (2’s complement, LE)", key="mf_bin_le", disabled=True)
+        st.text_input("Hex (2’s complement, LE)", key="mf_hex_le", disabled=True)
+        st.text_input("BCD (packed, LE)", key="mf_bcd_le", disabled=True)
+
+
+    with st.expander("# What is Endianness? (Byte Order)", expanded=False):
+        st.markdown(r"""
+        **Endianness** defines the order in which bytes of a multi-byte data word are stored in computer memory. Think of it as the computer's convention for writing down numbers.
+
+        Imagine the 4-byte hexadecimal number `0x0A0B0C0D`. It has four bytes: `0A`, `0B`, `0C`, and `0D`.
+        - The **most significant byte (MSB)** is `0A` (the "big end").
+        - The **least significant byte (LSB)** is `0D` (the "little end").
+
+        How does a computer store these four bytes in four sequential memory addresses (e.g., `1000` to `1003`)? There are two primary ways:
+
+        ---
+
+        ### Big-Endian: "Big End First"
+
+        This is the intuitive way, similar to how we write numbers and read text (left-to-right). The **most significant byte (MSB)** is stored at the **lowest memory address**.
+
+        - **Analogy:** Writing the number "123". You write the most significant digit '1' first.
+        - **Used In:** Networking protocols (like TCP/IP), older Mac processors (PowerPC), and many RISC architectures.
+
+        **Example:** Storing `0x0A0B0C0D` in memory:
+        $$
+        \begin{array}{c|c}
+        \text{Memory Address} & \text{Value Stored} \\
+        \hline
+        \texttt{1000} & \texttt{0A} \\
+        \texttt{1001} & \texttt{0B} \\
+        \texttt{1002} & \texttt{0C} \\
+        \texttt{1003} & \texttt{0D} \\
+        \end{array}
+        $$
+
+        ---
+
+        ### Little-Endian: "Little End First"
+
+        This is the more common convention in modern consumer hardware. The **least significant byte (LSB)** is stored at the **lowest memory address**.
+
+        - **Analogy:** Writing a date in `DD-MM-YYYY` format. The least significant component (day) comes first.
+        - **Used In:** Intel and AMD x86/x64 processors, modern Apple Silicon (ARM), and various file formats.
+
+        **Example:** Storing `0x0A0B0C0D` in memory:
+        $$
+        \begin{array}{c|c}
+        \text{Memory Address} & \text{Value Stored} \\
+        \hline
+        \texttt{1000} & \texttt{0D} \\
+        \texttt{1001} & \texttt{0C} \\
+        \texttt{1002} & \texttt{0B} \\
+        \texttt{1003} & \texttt{0A} \\
+        \end{array}
+        $$
+
+        ---
+
+        ### Why Does It Matter?
+
+        - **Networking:** Data sent over a network must be in a standard order (Network Byte Order, which is Big-Endian). Little-endian machines must convert their byte order before sending and after receiving.
+        - **File Formats:** Files like images (`.bmp`) or executables (`.exe`) have specified endianness. Reading them on a machine with the wrong native order requires byte swapping.
+        - **Hardware:** It can simplify certain arithmetic operations at the circuit level, which is one reason for the prevalence of little-endian in modern CPUs.
+
+        ### Check Your System's Endianness in Python
+        You can easily check your machine's native byte order:
+        ```python
+        import sys
+        # This will print 'little' or 'big'
+        print(sys.byteorder)
+        ```
+        Most likely, your personal computer will print `little`.
+        """)
