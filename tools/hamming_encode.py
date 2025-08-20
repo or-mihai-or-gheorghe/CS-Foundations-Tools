@@ -26,6 +26,14 @@ from typing import Dict, List, Tuple, Optional
 
 # ---------- Utilities ----------
 
+def _to_subscript(s: object) -> str:
+    """Converts a number or string of digits to unicode subscript characters."""
+    SUBSCRIPT_MAP = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+    }
+    return "".join(SUBSCRIPT_MAP.get(char, char) for char in str(s))
+
 def _find_p(k: int) -> int:
     """
     Return the minimal number of parity bits p such that 2^p >= k + p + 1.
@@ -141,14 +149,14 @@ def hamming_encode_logic(data_bits_str: str) -> Tuple[Optional[Dict[str, object]
 
         parity_by_position[ppos] = parity_value
 
-        # Build human-friendly equation text
-        # Example: p(4) = d2 ⊕ d3 ⊕ d4  (values: 1 ⊕ 0 ⊕ 1 = 0)
-        lhs = f"p({ppos})"
+        # Build human-friendly equation text with subscripts
+        # Example: p₄ = d₂ ⊕ d₃ ⊕ d₄   ⇒   p₄ = 1 ⊕ 0 ⊕ 1 = 0
+        lhs = f"p{_to_subscript(ppos)}"
         rhs_terms_names = []
         rhs_terms_vals = []
         for j in data_positions_used:
             didx = pos_to_didx[j]  # 0-based in input string
-            rhs_terms_names.append(f"d[{didx+1}]")
+            rhs_terms_names.append(f"d{_to_subscript(didx + 1)}")
             rhs_terms_vals.append(str(c[j - 1]))
 
         if rhs_terms_names:
@@ -159,9 +167,9 @@ def hamming_encode_logic(data_bits_str: str) -> Tuple[Optional[Dict[str, object]
             # No data terms on this row ⇒ parity is 0
             eqn_text = f"{lhs} = 0   (no data terms selected on this row)"
 
-        # Also provide a compact “row sums these positions” view
+        # Also provide a compact “row sums these positions” view with subscript
         pos_list_str = ", ".join(str(j) for j in selected_positions)
-        compact = f"Row {r} (MSB row is 0): XOR positions {{{pos_list_str}}} = 0 ⇒ unknown is p({ppos})."
+        compact = f"Row {r} (MSB row is 0): XOR positions {{{pos_list_str}}} = 0 ⇒ unknown is p{_to_subscript(ppos)}."
 
         row_equations.append({
             "row_index": r,
@@ -194,7 +202,7 @@ def hamming_encode_logic(data_bits_str: str) -> Tuple[Optional[Dict[str, object]
     pos_lines = []
     for pos in range(1, n + 1):
         tag = "P" if pos in parity_set else "D"
-        pos_lines.append(f"{pos:>3} [{_binary_str(pos, p)}]  {tag}")
+        pos_lines.append(f"{pos:>3}  [{_binary_str(pos, p)}]  {tag}")
     positions_table = "pos  [MSB..LSB]  type\n" + "\n".join(pos_lines)
 
     # Highlight parity bits in the final codeword
@@ -280,6 +288,33 @@ def render() -> None:
             f"- **Data positions:** {results['data_positions']}"
         )
 
+        st.markdown("**Initial codeword structure (data bits placed, parity bits unknown):**")
+        
+        # Create a mapping from data position to the actual data bit
+        data_map = {pos: bit for pos, bit in zip(results['data_positions'], results['d_bits'])}
+        
+        # Build the list of parts for the initial codeword display
+        initial_codeword_parts = []
+        parity_set = set(results['parity_positions'])
+        for i in range(1, results['n'] + 1):
+            if i in parity_set:
+                # Placeholder for unknown parity bits, styled like the final ones
+                part = f"<span style='color:#FF4B4B;font-weight:700;'>p<sub>{i}</sub></span>"
+                initial_codeword_parts.append(part)
+            else:
+                # Data bit
+                part = str(data_map[i])
+                initial_codeword_parts.append(part)
+        
+        # Assemble into the final HTML string with the same styling as the final codeword
+        initial_codeword_html = (
+            "<div style='font-family:monospace;font-size:1.25rem;'>"
+            + " ".join(initial_codeword_parts)
+            + "</div>"
+        )
+        
+        st.markdown(initial_codeword_html, unsafe_allow_html=True)        
+
         # 2) H construction and intuition
         st.markdown("### 2) Build H (MSB-at-top columns)")
         st.markdown(
@@ -290,6 +325,35 @@ def render() -> None:
         st.markdown("Parity-check matrix **H**:")
         st.code(_format_matrix(results["H"], "H"))
 
+        # Helper for unicode subscripts, defined locally for simple insertion
+        SUBSCRIPT_MAP = {
+            '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+            '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+        }
+        SUB_TRANS = str.maketrans(SUBSCRIPT_MAP)
+
+        st.markdown("Transposed codeword **cᵀ**:")
+        # Build the vector rows
+        c_transpose_rows = []
+        parity_set = set(results['parity_positions'])
+        data_map = {pos: bit for pos, bit in zip(results['data_positions'], results['d_bits'])}
+
+        for i in range(1, results['n'] + 1):
+            if i in parity_set:
+                label = f"p{str(i).translate(SUB_TRANS)}"
+                c_transpose_rows.append(label)
+            else:
+                label = str(data_map[i])
+                c_transpose_rows.append(label)
+        
+        # Find max width for alignment and format the matrix string
+        max_width = max(len(s) for s in c_transpose_rows)
+        formatted_rows = [f"[{s:^{max_width}}]" for s in c_transpose_rows]
+        c_transpose_str = "cᵀ ({n}x1):\n{matrix}".format(
+            n=results['n'],
+            matrix="\n".join(formatted_rows)
+        )
+        st.code(c_transpose_str)       
 
         # 3) Place data and form H · cᵀ = 0
         st.markdown("### 3) Form the row equations from H · cᵀ = 0")
@@ -304,10 +368,13 @@ def render() -> None:
             st.markdown(f"- {eq['compact_text']}")
             st.code(eq["equation_text"])
 
-        # 4) Parity summary
+        # 4) Parity values by position
         st.markdown("### 4) Parity values by position")
-        pretty = ", ".join([f"p({pos}) = {bit}" for pos, bit in sorted(results["parity_by_position"].items())])
-        st.markdown(pretty)
+        pretty_parity = ", ".join([
+            f"p{_to_subscript(pos)} = {bit}" 
+            for pos, bit in sorted(results["parity_by_position"].items())
+        ])
+        st.markdown(f"**{pretty_parity}**")
 
         # 5) Assemble and verify
         st.markdown("### 5) Final codeword and verification")
