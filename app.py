@@ -1,11 +1,16 @@
 # app.py
 
 import streamlit as st
+from tools import decimal_to_binary, binary_to_decimal
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
 
 # --- Data Structure for Tool Groups ---
 TOOL_GROUPS = {
+        "Binary & Base Conversions": {
+        "Decimal → Binary": decimal_to_binary,
+        "Binary → Decimal": binary_to_decimal,
+    },
     "Floating Point Operations": {
         "Floating-Point Converter": floating_point,
         "Decimal Converter": decimal_converter,
@@ -31,8 +36,11 @@ ALL_TOOLS = {
 def main():
     st.set_page_config(page_title="CS Fundamentals - Bucharest University of Economic Studies", layout="wide")
     
-    st.sidebar.markdown("The Faculty of Economic Cybernetics, Statistics and Informatics")
-    st.sidebar.markdown("Bucharest University of Economic Studies")
+    # st.sidebar.markdown("The Faculty of Economic Cybernetics, Statistics and Informatics")
+    # st.sidebar.markdown("Bucharest University of Economic Studies")
+    st.sidebar.caption("Bucharest University of Economic Studies")
+    st.sidebar.caption("### The Faculty of Economic Cybernetics, Statistics and Informatics")
+    st.sidebar.markdown("---")
     st.sidebar.title("CS Foundation Tools")
 
     # --- State Management for Unified Selection ---

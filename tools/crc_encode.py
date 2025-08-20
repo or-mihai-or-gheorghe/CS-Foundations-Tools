@@ -293,6 +293,64 @@ $$
 """
         )
 
+    with st.expander("ℹ️ What does “Arithmetic is in GF(2)” mean?", expanded=False):
+        st.markdown(r"""
+    **GF(2)** is the Galois field with two elements $\{0,1\}$.
+    All operations are **modulo 2**, which maps perfectly to digital logic circuitry.
+
+    ### Operations in GF(2)
+
+    - **Addition = XOR (no carries)**
+    
+    $$
+    \begin{align*}
+    0+0 &= 0 \\
+    0+1 &= 1 \\
+    1+0 &= 1 \\
+    1+1 &= \color{#c00}{0}
+    \end{align*}
+    $$
+    
+    Subtraction is equivalent to addition in GF(2): $a-b \equiv a+b \pmod 2$.
+
+    - **Multiplication = AND**
+    
+    $$
+    \begin{align*}
+    0\cdot0 &= 0 \\
+    0\cdot1 &= 0 \\
+    1\cdot0 &= 0 \\
+    1\cdot1 &= 1
+    \end{align*}
+    $$
+
+
+    ### Application to Polynomials & CRCs
+
+    - **Polynomials over GF(2)** Bits are treated as coefficients (0 or 1). For example, the bitstring `10011` corresponds to the polynomial $x^4 + x + 1$. Adding these polynomials is a coefficient-wise **XOR**.
+
+    - **CRC Long Division** The division process is "carry-less." Each subtraction step in traditional long division is replaced by an **XOR operation** with the aligned generator polynomial. This is why CRC hardware is so efficient.
+
+    - **Why GF(2) is Ideal for CRCs** It allows for simple hardware implementation (XOR/AND gates), enables extremely fast carry-less division, and provides robust algebraic properties for error detection.
+
+
+    ### Quick Examples
+
+    - **Bitstring XOR** (addition in GF(2)):  
+    $\texttt{10110} \oplus \texttt{11001} = \texttt{01111}$ *(Notice: no carries)*
+    - **Bitwise AND** (multiplication in GF(2)):  
+    $1\cdot1=1$, $1\cdot0=0$, $0\cdot1=0$, $0\cdot0=0$
+
+    **Useful Identities**
+
+    $$
+    \begin{align*}
+    a \oplus b & \;=\; (a+b)\bmod 2 \\
+    (a\oplus b)\oplus c & \;=\; a\oplus(b\oplus c)
+    \end{align*}
+    $$
+    """)
+
 # Optional helpers (useful for tests)
 def _crc_encode_return_codeword(msg_bits_str: str, gen_bits_str: str) -> str:
     results, err = _crc_encode_core(msg_bits_str, gen_bits_str, want_trace=False)
