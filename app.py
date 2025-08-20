@@ -1,17 +1,20 @@
 # app.py
 
 import streamlit as st
-from tools import decimal_to_binary, binary_to_decimal, multi_format_converter, raw_binary_arithmetic
+from tools import decimal_to_binary, binary_to_decimal, multi_format_converter, raw_binary_arithmetic, twos_complement_arithmetic
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
 
 # --- Data Structure for Tool Groups ---
 TOOL_GROUPS = {
-        "Binary & Base Conversions": {
+    "Binary Operations & Conversions": {
         "Decimal → Binary": decimal_to_binary,
         "Binary → Decimal": binary_to_decimal,
         "Multi-Format Converter": multi_format_converter,
         "Raw Unsigned Arithmetic": raw_binary_arithmetic,
+        "2's Complement Arithmetic (+/-)": twos_complement_arithmetic,
+        "BCD Arithmetic (+/-)": None
+
     },
     "Floating Point Operations": {
         "Floating-Point Converter": floating_point,

@@ -405,8 +405,6 @@ def _divide_binary_core(a_str: str, b_str: str) -> Tuple[Optional[Dict[str, str]
         return None, ["Error: Division by zero is not allowed."]
 
     explanation: List[str] = []
-    explanation.append("### 1. Setup Long Division")
-    explanation.append("We’ll perform binary long division, showing each subtraction and the running remainder.")
 
     # --- Helper to render the final merged layout ---------------------------------
     def _build_layout(dividend: str, divisor: str, records: List[dict], quotient: str) -> str:
@@ -488,7 +486,7 @@ def _divide_binary_core(a_str: str, b_str: str) -> Tuple[Optional[Dict[str, str]
     remainder = bin(R)[2:] if R != 0 else "0"  # normalize all-zero remainder to "0"
 
     # --- 2) Long-division trace (merged view) ------------------------------------
-    explanation.append("### 2. Long Division Trace")
+    explanation.append("### 1. Long Division Trace")
     explanation.append(
         "Each subtraction places the divisor under the current chunk; the dashed line shows the subtraction, "
         "then we bring down the next bit(s) to form the next chunk."
@@ -497,7 +495,7 @@ def _divide_binary_core(a_str: str, b_str: str) -> Tuple[Optional[Dict[str, str]
     explanation.append("```\n" + layout_block + "\n```")
 
     # --- 3) Final result ----------------------------------------------------------
-    explanation.append("### 3. Final Result")
+    explanation.append("### 2. Final Result")
     explanation.append(f"**Answer:** Quotient = `{quotient}`, Remainder = `{remainder}`")
 
     return {"quotient": quotient, "remainder": remainder}, explanation
