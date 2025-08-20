@@ -349,22 +349,33 @@ def _update_all_views(val: int, width: int, ones_neg_zero: bool):
     st.session_state.mf_dec_be = st.session_state.mf_dec
     st.session_state.mf_dec_le = st.session_state.mf_dec
 
-    # BCD: pack to bits (4 per digit), then byte-swap for LE view (pad to full bytes on the left)
-    bcd_disp = st.session_state.mf_bcd  # like "- 0001 0010 ..."
+    # BCD: pack to bits (4 per digit). First pad to the selected bit width (if needed),
+    # then perform endianness. If byte padding is added for swapping, trim it back
+    # so BE and LE displays have the same bit-length as the width-padded input.
+    bcd_disp = st.session_state.mf_bcd  # e.g., "- 0001 0010 ..."
     sign_bcd = bcd_disp.strip().startswith("-")
     bits_only = "".join(ch for ch in bcd_disp if ch in "01")
+
     if bits_only:
-        if len(bits_only) % 8 != 0:
-            bits_only = "0" * (8 - (len(bits_only) % 8)) + bits_only
-        bcd_be_bits = bits_only
-        bcd_le_bits = _byteswap_bits(bits_only)
-        bcd_be = " ".join(bcd_be_bits[i:i+4] for i in range(0, len(bcd_be_bits), 4))
-        bcd_le = " ".join(bcd_le_bits[i:i+4] for i in range(0, len(bcd_le_bits), 4))
+        # 1) Ensure at least `width` bits before applying endianness (no truncation).
+        if len(bits_only) < width:
+            bits_w = "0" * (width - len(bits_only)) + bits_only
+        else:
+            bits_w = bits_only  # longer than width is allowed/kept for display
+
+        # 2) LE view requires byte swapping. The helper pads to full bytes on the left;
+        #    after swapping, trim back to the original (width-padded) length.
+        le_swapped_full = _byteswap_bits(bits_w)
+        le_swapped = le_swapped_full[-len(bits_w):]
+
+        # 3) Group both BE and LE in nibbles for readability.
+        bcd_be = " ".join(bits_w[i:i+4] for i in range(0, len(bits_w), 4))
+        bcd_le = " ".join(le_swapped[i:i+4] for i in range(0, len(le_swapped), 4))
     else:
         bcd_be = bcd_le = "0000"
+
     st.session_state.mf_bcd_be = ("-" if sign_bcd else "") + bcd_be
     st.session_state.mf_bcd_le = ("-" if sign_bcd else "") + bcd_le
-
 
 # ------------------ UI ------------------
 
@@ -467,7 +478,6 @@ Type in **any** one of the boxes — all the others update instantly.
         for m in messages:
             st.error(m)
 
-    st.markdown("---")
     st.subheader("Byte-order views (read-only)")
 
     be_col, le_col = st.columns(2)
@@ -494,8 +504,6 @@ Type in **any** one of the boxes — all the others update instantly.
 
         How does a computer store these four bytes in four sequential memory addresses (e.g., `1000` to `1003`)? There are two primary ways:
 
-        ---
-
         ### Big-Endian: "Big End First"
 
         This is the intuitive way, similar to how we write numbers and read text (left-to-right). The **most significant byte (MSB)** is stored at the **lowest memory address**.
@@ -515,8 +523,6 @@ Type in **any** one of the boxes — all the others update instantly.
         \end{array}
         $$
 
-        ---
-
         ### Little-Endian: "Little End First"
 
         This is the more common convention in modern consumer hardware. The **least significant byte (LSB)** is stored at the **lowest memory address**.
@@ -535,8 +541,6 @@ Type in **any** one of the boxes — all the others update instantly.
         \texttt{1003} & \texttt{0A} \\
         \end{array}
         $$
-
-        ---
 
         ### Why Does It Matter?
 
