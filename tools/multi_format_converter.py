@@ -494,7 +494,7 @@ Type in **any** one of the boxes — all the others update instantly.
         st.text_input("BCD (packed, LE)", key="mf_bcd_le", disabled=True)
 
 
-    with st.expander("# What is Endianness? (Byte Order)", expanded=False):
+    with st.expander("ℹ️ What is Endianness? (Byte Order)", expanded=False):
         st.markdown(r"""
         **Endianness** defines the order in which bytes of a multi-byte data word are stored in computer memory. Think of it as the computer's convention for writing down numbers.
 
