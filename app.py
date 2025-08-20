@@ -1,7 +1,7 @@
 # app.py
 
 import streamlit as st
-from tools import decimal_to_binary, binary_to_decimal, multi_format_converter, raw_binary_arithmetic, twos_complement_arithmetic
+from tools import decimal_to_binary, binary_to_decimal, multi_format_converter, raw_binary_arithmetic, twos_complement_arithmetic, bcd_arithmetic
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
 
@@ -13,7 +13,7 @@ TOOL_GROUPS = {
         "Multi-Format Converter": multi_format_converter,
         "Raw Unsigned Arithmetic": raw_binary_arithmetic,
         "2's Complement Arithmetic (+/-)": twos_complement_arithmetic,
-        "BCD Arithmetic (+/-)": None
+        "BCD Arithmetic (+/-)": bcd_arithmetic
 
     },
     "Floating Point Operations": {
