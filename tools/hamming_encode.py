@@ -368,16 +368,8 @@ def render() -> None:
             st.markdown(f"- {eq['compact_text']}")
             st.code(eq["equation_text"])
 
-        # 4) Parity values by position
-        st.markdown("### 4) Parity values by position")
-        pretty_parity = ", ".join([
-            f"p{_to_subscript(pos)} = {bit}" 
-            for pos, bit in sorted(results["parity_by_position"].items())
-        ])
-        st.markdown(f"**{pretty_parity}**")
-
-        # 5) Assemble and verify
-        st.markdown("### 5) Final codeword and verification")
+        # 4) Assemble and verify
+        st.markdown("### 4) Final codeword and verification")
         st.markdown("Codeword (parity bits highlighted):")
         st.markdown(results["highlighted_codeword_html"], unsafe_allow_html=True)
         st.markdown("Syndrome `H · cᵀ` (should be all zeros):")

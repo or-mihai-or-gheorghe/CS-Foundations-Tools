@@ -2,7 +2,7 @@
 
 import streamlit as st
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
-from tools import hamming_encode
+from tools import hamming_encode, hamming_decode, crc_encode
 
 # --- Data Structure for Tool Groups ---
 TOOL_GROUPS = {
@@ -14,8 +14,8 @@ TOOL_GROUPS = {
     },
     "Error Detecting & Correcting Codes": {
         "Hamming Encode": hamming_encode,
-        "Hamming Decode & Correct": None,
-        "CRC Encode": None,
+        "Hamming Decode & Correct": hamming_decode,
+        "CRC Encode": crc_encode,
         "CRC Decode": None
     }
 }
