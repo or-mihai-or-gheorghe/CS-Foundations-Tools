@@ -1,7 +1,7 @@
 # app.py
 
 import streamlit as st
-from tools import decimal_to_binary, binary_to_decimal
+from tools import decimal_to_binary, binary_to_decimal, multi_format_converter
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
 
@@ -10,6 +10,7 @@ TOOL_GROUPS = {
         "Binary & Base Conversions": {
         "Decimal → Binary": decimal_to_binary,
         "Binary → Decimal": binary_to_decimal,
+        "Multi-Format Converter": multi_format_converter,
     },
     "Floating Point Operations": {
         "Floating-Point Converter": floating_point,
