@@ -65,67 +65,63 @@ _NOT_ALIASES = r"(?:!|~|\bNOT\b|¬)"
 def _norm_expr(s: str) -> Tuple[str, List[str]]:
     """
     Normalize a user Boolean expression to a safe Python expression using
-      & for AND, | for OR, and 'not' for NOT.
+      'and', 'or', and 'not'.
     Accepts adjacency for AND and trailing apostrophes for negation.
     Returns (python_expr, variables_used_sorted_by_A_to_E).
     """
     if not isinstance(s, str):
         raise ValueError("Expression must be a string.")
 
-    # Keep only allowed tokens
-    s0 = s.strip()
+    # Stage 1: Canonicalization.
+    # Convert all user aliases into a simple, consistent internal format.
+    # Use single characters: '&' for AND, '|' for OR, '!' for prefix NOT.
+    s = s.strip()
+    s = re.sub(r"[\s_]+", "", s)
+    s = re.sub(_OR_ALIASES, '|', s, flags=re.IGNORECASE)
+    s = re.sub(_AND_ALIASES, '&', s, flags=re.IGNORECASE)
+    s = re.sub(_NOT_ALIASES, '!', s, flags=re.IGNORECASE)
+    s = s.upper()
 
-    # Uppercase variables (A..E), preserve parentheses/apostrophes
-    # Replace aliases with canonical tokens first (space-padded for word boundaries)
-    # We do word-boundary matches case-insensitively.
-    def _repl_case(pattern, repl):
-        return re.sub(pattern, repl, s0, flags=re.IGNORECASE)
+    # Stage 2: Adjacency Insertion.
+    # On the canonical string, insert the explicit '&' for adjacency.
+    result = []
+    for i, char in enumerate(s):
+        result.append(char)
+        if i < len(s) - 1:
+            next_char = s[i+1]
+            # Adjacency occurs if a term-ender is followed by a term-starter.
+            # Ender: Variable, closing parenthesis, or a prime.
+            # Starter: Variable, opening parenthesis, or a prefix NOT.
+            if char in "ABCDE)'" and next_char in "ABCDE(!":
+                result.append('&')
+    s = "".join(result)
 
-    s0 = _repl_case(_OR_ALIASES, '|')
-    s0 = _repl_case(_AND_ALIASES, '&')
-    s0 = _repl_case(_NOT_ALIASES, '!')
+    # Stage 3: Translation to Python's Boolean Syntax.
+    # Convert the canonical format to a guaranteed-valid Python expression.
 
-    # Remove spaces/underscores
-    s0 = re.sub(r"[\s_]+", "", s0)
+    # First, handle all forms of negation (postfix ' and prefix !).
+    # The order is crucial: handle specific primes before the general '!' prefix.
+    # A loop handles nested structures like ((A&B)')'.
+    while "'" in s or '!' in s:
+        s_before = s
+        # Handle primes on parenthesized groups: (X)' -> not(X)
+        s = re.sub(r"(\([^)]+\))'", r'not(\1)', s)
+        # Handle primes on single variables: A' -> (not A)
+        s = re.sub(r"([A-E])'", r'(not \1)', s)
+        # Handle the prefix NOT operator: !X -> not X
+        s = s.replace('!', 'not ')
 
-    # Map lowercase vars to uppercase
-    s0 = re.sub(r"[a-e]", lambda m: m.group(0).upper(), s0)
-
-    # Insert explicit AND for adjacency: between (VAR or ')') and (VAR or '(' or '!')
-    tokens = list(s0)  # char-wise scan is enough after normalization
-    out = []
-    prev = ''
-    for ch in tokens:
-        need_and = False
-        if prev:
-            prev_is_var_or_close = (prev in ')') or (prev in VAR_SET)
-            cur_is_var_or_open_or_not = (ch in '(') or (ch in VAR_SET) or (ch == '!')
-            if prev_is_var_or_close and cur_is_var_or_open_or_not:
-                need_and = True
-        if need_and:
-            out.append('&')
-        out.append(ch)
-        prev = ch
-    s1 = ''.join(out)
-
-    # Trailing apostrophes → NOT: replace X' with !X, and (...)' with !(...)
-    # We do it iteratively to handle multiple primes like A'' => !!A
-    while True:
-        new = re.sub(r"([A-E]|\))'", r"!\1", s1)
-        if new == s1:
+        if s == s_before:
+            # Break if no change was made, to prevent infinite loops on malformed input.
             break
-        s1 = new
 
-    # Replace remaining '!' with ' not ' for Python
-    s1 = s1.replace('!', ' not ')
-    # Ensure only allowed chars remain
-    if re.search(r"[^A-E()&| \t\n\rnot]", s1):
-        # The regex above is conservative; we'll allow only A-E, (), &, |, and ' not '
-        pass
+    # Finally, replace the canonical AND/OR with Python's boolean operators.
+    # Surrounding them with spaces is critical for the eval() parser.
+    s = s.replace('&', ' and ')
+    s = s.replace('|', ' or ')
 
-    # Collect variables used
-    used = sorted({ch for ch in s1 if ch in VAR_SET}, key=lambda v: VAR_SET.index(v))
-    return s1, used
+    used = sorted({ch for ch in s if ch in VAR_SET}, key=lambda v: VAR_SET.index(v))
+    return s, used
 
 def _eval_expr_to_minterms(expr: str, var_order: List[str]) -> Set[int]:
     """
@@ -460,14 +456,11 @@ are shown with translucency and distinct colors.
 - **Spaces** are ignored. Parentheses ok.
 
 **Examples**
-$$
-\begin{gather*}
-A + B·C \\
-A'B + C(D + E') \\
-a b' + !c\\
-(A + B)(C' + D)
-\end{gather*}
-$$
+`A + B·C`,
+`A'B + C(D + E')`,
+`a b' + !c`,
+`(A + B)(C' + D)`
+
             """
         )
 
