@@ -301,11 +301,11 @@ PALETTE = [
 
 def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
     R, C = model["R"], model["C"]
+    rb, cb = model["rb"], model["cb"]
+    rows_gray, cols_gray = model["rows_gray"], model["cols_gray"]
+    var_order = model["var_order"]
     cell_to_min = model["cell_to_min"]
 
-    # Compute back rectangle geometry (r0,c0,h,w) for each group by scanning
-    # Choose a canonical (minimal area, then top-left) rectangle that generates the same set.
-    # Because groups are power-of-two rectangles with wrap, we can find an h,w,r0,c0 that matches.
     def find_rect_for_group(minset: Set[int]) -> Tuple[int,int,int,int]:
         target = set(minset)
         for h,w in sorted(all_power2_sizes(R,C), key=lambda s: s[0]*s[1], reverse=True):
@@ -314,16 +314,13 @@ def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
                     cover = {cell_to_min[(r0+dr)%R][(c0+dc)%C] for dr in range(h) for dc in range(w)}
                     if cover == target:
                         return (r0,c0,h,w)
-        # Fallback (shouldn't happen)
         return (0,0,1,1)
 
-    # Build HTML
-    CELL = 44   # px per cell
-    GAP  = 4    # px
+    CELL = 44
+    GAP  = 4
     W = C*CELL + (C-1)*GAP
     H = R*CELL + (R-1)*GAP
 
-    # Cells
     cells_html = []
     for r in range(R):
         for c in range(C):
@@ -337,7 +334,6 @@ def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
                 f"</div>"
             )
 
-    # Groups (layers)
     layers = []
     for gi, g in enumerate(groups):
         color = PALETTE[gi % len(PALETTE)]
@@ -353,12 +349,40 @@ def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
                 f"background:rgba({color},0.28);border:2px solid rgba({color},0.9);'></div>"
             )
 
+    # --- put headers OUTSIDE the grid (reserve space around it) ---
+    PAD_L = 72 if rb > 0 else 0   # left gutter for row labels
+    PAD_T = 48 if cb > 0 else 0   # top gutter for column labels
+
+    row_hdrs = []
+    if rb > 0:
+        row_vars_label = "".join(var_order[:rb])
+        for r, rcode in enumerate(rows_gray):
+            bits = format(rcode, f"0{rb}b")
+            cy = PAD_T + r*CELL + r*GAP + CELL/2
+            row_hdrs.append(
+                f"<div class='rowhdr' style='top:{cy}px;left:8px;transform:translateY(-50%);'>"
+                f"{row_vars_label} - {bits}</div>"
+            )
+
+    col_hdrs = []
+    if cb > 0:
+        col_vars_label = "".join(var_order[rb:rb+cb])
+        for c, ccode in enumerate(cols_gray):
+            bits = format(ccode, f"0{cb}b")
+            cx = PAD_L + c*CELL + c*GAP + CELL/2
+            col_hdrs.append(
+                f"<div class='colhdr' style='left:{cx}px;top:8px;transform:translateX(-50%);'>"
+                f"{col_vars_label}<br>{bits}</div>"
+            )
+
     html = f"""
-    <div class="wrap">
+    <div class="wrap" style="padding-left:{PAD_L}px;padding-top:{PAD_T}px;">
       <div class="kmap" style="width:{W}px;height:{H}px;">
         {''.join(cells_html)}
         {''.join(layers)}
       </div>
+      {''.join(row_hdrs)}
+      {''.join(col_hdrs)}
     </div>
     <style>
       .wrap {{ position:relative; margin: 6px 0 18px 0; }}
@@ -383,17 +407,19 @@ def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
          font-size: 16px;
          font-weight: 600;
       }}
-      .cell .minidx {{
-         position:absolute; top:4px; left:6px; font-size: 11px; color:#667; font-weight:500;
-      }}
-      .cell .val {{
-         transform: translateY(1px);
-      }}
+      .cell .minidx {{ position:absolute; top:4px; left:6px; font-size: 11px; color:#667; font-weight:500; }}
+      .cell .val {{ transform: translateY(1px); }}
       .cell.v1 {{ background: #fffefd; border-color:#f1d1d1; }}
       .cell.v0 {{ color:#99a; font-weight:500; }}
       .cell.vx {{ color:#aa6; }}
-      .group {{
-         position:absolute; pointer-events:none; border-radius: 10px;
+      .group {{ position:absolute; pointer-events:none; border-radius: 10px; z-index:1; }}
+      .rowhdr, .colhdr {{
+         position:absolute; z-index:3;
+         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+         font-size: 12px; color:#445;
+         background: rgba(255,255,255,0.92);
+         border: 1px solid #e3e3e3; border-radius: 6px;
+         padding: 2px 6px; pointer-events:none; white-space: pre; text-align:center;
       }}
     </style>
     """
@@ -534,22 +560,27 @@ def _run_kmap_pipeline(nvars: int, var_order: List[str], ones: Set[int], dcs: Se
     st.success(f"`F({','.join(var_order)}) = {sop}`  {source_label}")
 
     # List implicants
-    with st.expander("Selected implicants", expanded=True):
-        for i, (g, t) in enumerate(zip(cover, terms), start=1):
-            st.markdown(f"- **Group {i}**: covers minterms `{sorted(g)}` → term **{t}**")
+    st.subheader("Selected implicants")
+    for i, (g, t) in enumerate(zip(cover, terms), start=1):
+        st.markdown(f"- **Group {i}**: covers minterms `{sorted(g)}` → term **{t}**")
 
     # K-map HTML
-    st.subheader("K-map (Gray order, torus wrap, layered groups)")
+    st.subheader("K-map (Karnaugh)")
     html = render_kmap_html(model, values, cover)
-    st.components.v1.html(html, height= (model["R"]*48 + 40))
+
+    # increase iframe height to include the extra top gutter for column labels
+    CELL, GAP = 44, 4
+    PAD_T = 48 if model["cb"] > 0 else 0
+    iframe_h = model["R"]*CELL + (model["R"]-1)*GAP + PAD_T + 20
+    st.components.v1.html(html, height=iframe_h)
+
 
     # Small help
-    with st.expander("Notes", expanded=False):
-        st.markdown(
-            """
+    st.markdown(
+        """
 - **Gray order** on rows/columns ensures every neighbor differs by one bit.
 - The map is a **torus**: left↔right and top↔bottom wrap. Groups may span edges.
 - Don’t-cares (`X`) can be absorbed to make groups larger, but they don’t need to be covered.
 - Result uses **SOP** with `'` for negation and `·` for AND; `+` means OR.
-            """
-        )
+        """
+    )
