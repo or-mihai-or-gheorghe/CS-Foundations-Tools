@@ -4,7 +4,7 @@ import streamlit as st
 from tools import decimal_to_binary, binary_to_decimal, multi_format_converter, raw_binary_arithmetic, twos_complement_arithmetic, bcd_arithmetic
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
-from tools import logic_kmap_sop
+from tools import logic_kmap_sop, gray_code_converter
 
 # --- Data Structure for Tool Groups ---
 TOOL_GROUPS = {
@@ -12,6 +12,7 @@ TOOL_GROUPS = {
         "Decimal → Binary": decimal_to_binary,
         "Binary → Decimal": binary_to_decimal,
         "Multi-Format Converter": multi_format_converter,
+        "Gray Code Converter": gray_code_converter,
         "Raw Unsigned Arithmetic": raw_binary_arithmetic,
         "2's Complement Arithmetic (+/-)": twos_complement_arithmetic,
         "BCD Arithmetic (+/-)": bcd_arithmetic
