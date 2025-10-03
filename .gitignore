@@ -15,5 +15,6 @@ env/
 .vscode/
 .idea/
 
+# Merged code files
 merge_code.py
 merged_code.py
