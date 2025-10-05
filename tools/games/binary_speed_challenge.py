@@ -16,13 +16,13 @@ from .game_utils import (
 
 # ========================= JavaScript Timer Component =========================
 
-def render_countdown_timer(start_time: float, duration: int = 60) -> None:
-    """Render JavaScript countdown timer with visual progress bar"""
+def render_compact_timer(start_time: float, duration: int = 60) -> None:
+    """Render compact JavaScript timer with progress bar"""
     html = f"""
-    <div id="timer-container">
-        <div id="time-display">{duration}.0s</div>
-        <div id="progress-bar">
-            <div id="progress-fill"></div>
+    <div id="compact-timer">
+        <div id="timer-bar">
+            <div id="timer-fill"></div>
+            <div id="timer-text">⏱️ {duration}s</div>
         </div>
     </div>
     <script>
@@ -34,29 +34,28 @@ def render_countdown_timer(start_time: float, duration: int = 60) -> None:
             const elapsed = now - startTime;
             const remaining = Math.max(0, duration - elapsed);
 
-            const display = document.getElementById('time-display');
-            const fill = document.getElementById('progress-fill');
+            const timerText = document.getElementById('timer-text');
+            const timerFill = document.getElementById('timer-fill');
 
-            if (display && fill) {{
-                display.innerText = remaining.toFixed(1) + 's';
+            if (timerText && timerFill) {{
+                timerText.innerText = '⏱️ ' + remaining.toFixed(1) + 's';
 
                 const progress = (remaining / duration) * 100;
-                fill.style.width = progress + '%';
+                timerFill.style.width = progress + '%';
 
                 // Color warnings
                 if (remaining < 10) {{
-                    fill.style.backgroundColor = '#ff4444';
-                    display.style.color = '#ff4444';
-                    display.style.animation = 'pulse 0.5s infinite';
+                    timerFill.style.backgroundColor = '#ff4444';
+                    timerText.style.color = '#ff4444';
                 }} else if (remaining < 30) {{
-                    fill.style.backgroundColor = '#ffa726';
+                    timerFill.style.backgroundColor = '#ffa726';
                 }}
 
                 if (remaining > 0) {{
                     requestAnimationFrame(updateTimer);
                 }} else {{
-                    display.innerText = 'TIME UP!';
-                    display.style.fontSize = '42px';
+                    timerText.innerText = '⏱️ TIME UP!';
+                    timerText.style.color = '#ff4444';
                 }}
             }}
         }}
@@ -64,48 +63,42 @@ def render_countdown_timer(start_time: float, duration: int = 60) -> None:
         updateTimer();
     </script>
     <style>
-        @keyframes pulse {{
-            0%, 100% {{ opacity: 1; }}
-            50% {{ opacity: 0.6; }}
+        #compact-timer {{
+            margin-bottom: 12px;
         }}
 
-        #timer-container {{
-            text-align: center;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }}
-
-        #time-display {{
-            font-size: 56px;
-            font-weight: bold;
-            color: white;
-            font-family: 'Courier New', monospace;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-            transition: all 0.3s ease;
-        }}
-
-        #progress-bar {{
-            width: 100%;
-            height: 24px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 12px;
-            margin-top: 15px;
+        #timer-bar {{
+            position: relative;
+            height: 36px;
+            background: #f0f0f0;
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
 
-        #progress-fill {{
+        #timer-fill {{
+            position: absolute;
             height: 100%;
             background: #4CAF50;
             transition: width 0.1s linear, background-color 0.3s;
-            border-radius: 12px;
+        }}
+
+        #timer-text {{
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            font-family: 'Courier New', monospace;
+            z-index: 1;
         }}
     </style>
     """
-    st.components.v1.html(html, height=150)
+    st.components.v1.html(html, height=50)
 
 # ========================= Game State Management =========================
 
@@ -153,13 +146,14 @@ def reset_game():
     }
 
 def is_game_active() -> bool:
-    """Check if game is still active (within time limit)"""
+    """Check if game is still active (within time limit + grace period)"""
     game = st.session_state.binary_game
     if not game['active'] or game['start_time'] is None:
         return False
 
     elapsed = time.time() - game['start_time']
-    return elapsed < game['duration']
+    # Add 2-second grace period to prevent timer lock issue
+    return elapsed < (game['duration'] + 2)
 
 def generate_question():
     """Generate a new question based on game settings"""
@@ -367,22 +361,18 @@ def render_game_screen():
         st.rerun()
         return
 
-    # Display timer
-    render_countdown_timer(game['start_time'], game['duration'])
+    # Display compact timer
+    render_compact_timer(game['start_time'], game['duration'])
 
-    # Display score and stats
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Score", game['score'])
-    with col2:
-        st.metric("Streak", f"{game['streak']} 🔥" if game['streak'] > 0 else "0")
-    with col3:
-        accuracy = (game['correct_count'] / game['total_count'] * 100) if game['total_count'] > 0 else 0
-        st.metric("Accuracy", f"{accuracy:.0f}%")
-    with col4:
-        st.metric("Questions", f"{game['total_count']}")
+    # Display compact stats in one line
+    streak_display = f"🔥 {game['streak']}" if game['streak'] > 0 else ""
+    stats_text = f"💰 <b>{game['score']} pts</b> | 📝 <b>Q{game['total_count']}</b>"
+    if streak_display:
+        stats_text += f" | {streak_display}"
 
-    # Display last answer result if available
+    st.markdown(f"<div style='text-align: center; font-size: 16px; margin-bottom: 10px;'>{stats_text}</div>", unsafe_allow_html=True)
+
+    # Display last answer result if available (compact version)
     if game['last_result']:
         if game['last_result']['is_correct']:
             st.success(game['last_result']['message'])
@@ -392,19 +382,22 @@ def render_game_screen():
             else:
                 st.error(game['last_result']['message'])
 
-    # Display current question
+    # Display current question (larger for mobile)
     question = game['current_question']
-    st.subheader(question['display_question'])
+    # Convert markdown backticks to HTML code tags for proper rendering
+    import re
+    display_question = re.sub(r'`([^`]+)`', r'<code style="background: #f0f0f0; padding: 4px 8px; border-radius: 4px; font-family: monospace;">\1</code>', question['display_question'])
+    st.markdown(f"<h2 style='text-align: center; margin: 20px 0;'>{display_question}</h2>", unsafe_allow_html=True)
 
     # Input based on type
     if game['input_type'] == 'Multiple Choice':
-        # Multiple choice buttons
-        st.write("**Select your answer:**")
+        # Multiple choice buttons (responsive: 2 cols on desktop, stacks on mobile)
         cols = st.columns(2)
 
         for idx, choice in enumerate(question['choices']):
             col = cols[idx % 2]
-            if col.button(f"`{choice}`", key=f"choice_{idx}", use_container_width=True):
+            # Larger buttons with better mobile touch targets
+            if col.button(choice, key=f"choice_{idx}", use_container_width=True):
                 check_answer(choice)
 
                 # Generate next question immediately
@@ -417,7 +410,7 @@ def render_game_screen():
 
         # Skip button for Expert mode
         if game['difficulty'] == 'Expert':
-            st.markdown("")
+            st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
             if st.button("⏭️ Skip Question", key="skip_btn", use_container_width=True, type="secondary"):
                 check_answer("", is_skip=True)
 
@@ -471,10 +464,13 @@ def render_game_screen():
             </script>
         """, height=0)
 
-    # Quit button
-    if st.button("❌ Quit Game", type="secondary"):
-        game['active'] = False
-        st.rerun()
+    # Quit button (bottom, less prominent)
+    st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("❌ End Game", type="secondary", use_container_width=True):
+            game['active'] = False
+            st.rerun()
 
 def render_results_screen():
     """Render game over / results screen"""
