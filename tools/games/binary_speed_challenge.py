@@ -3,6 +3,7 @@
 import streamlit as st
 import time
 import random
+import re
 from typing import Optional
 from .game_utils import (
     DIFFICULTY_CONFIG,
@@ -385,7 +386,6 @@ def render_game_screen():
     # Display current question (larger for mobile)
     question = game['current_question']
     # Convert markdown backticks to HTML code tags for proper rendering
-    import re
     display_question = re.sub(r'`([^`]+)`', r'<code style="background: #f0f0f0; padding: 4px 8px; border-radius: 4px; font-family: monospace;">\1</code>', question['display_question'])
     st.markdown(f"<h2 style='text-align: center; margin: 20px 0;'>{display_question}</h2>", unsafe_allow_html=True)
 
