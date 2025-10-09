@@ -5,6 +5,7 @@ import time
 import random
 import re
 from typing import Optional
+from datetime import datetime
 from .game_utils import (
     DIFFICULTY_CONFIG,
     generate_random_number,
@@ -14,6 +15,10 @@ from .game_utils import (
     format_time,
     get_performance_rating
 )
+
+# Game identification constants (for multi-game support)
+GAME_SLUG = "binary_speed_challenge"
+GAME_DISPLAY_NAME = "Binary Speed Challenge"
 
 # ========================= JavaScript Timer Component =========================
 
@@ -122,7 +127,8 @@ def init_game_state():
             'total_count': 0,
             'history': [],
             'last_result': None,  # Store last answer result for display
-            'asked_numbers': set()  # Track numbers already asked
+            'asked_numbers': set(),  # Track numbers already asked
+            'result_saved': False  # Track if result has been saved to DB
         }
 
 def reset_game():
@@ -143,7 +149,8 @@ def reset_game():
         'total_count': 0,
         'history': [],
         'last_result': None,
-        'asked_numbers': set()
+        'asked_numbers': set(),
+        'result_saved': False  # Track if result has been saved to DB
     }
 
 def is_game_active() -> bool:
@@ -472,6 +479,68 @@ def render_game_screen():
             game['active'] = False
             st.rerun()
 
+def _save_game_result_to_db(game: dict, accuracy: float, avg_time: float):
+    """
+    Save game result to Firebase database if user is authenticated
+
+    Args:
+        game: Game state dictionary
+        accuracy: Final accuracy percentage
+        avg_time: Average time per question
+    """
+    try:
+        # Import Firebase functions
+        from firebase import get_current_user, save_game_result
+
+        user = get_current_user()
+
+        if user and user.get('is_authenticated'):
+            # Check if already saved (prevent duplicate saves)
+            if 'result_saved' in game and game['result_saved']:
+                return
+
+            # Prepare game data
+            game_data = {
+                "game_slug": GAME_SLUG,
+                "game_type": GAME_DISPLAY_NAME,
+                "timestamp": datetime.utcnow().isoformat(),
+                "user_email": user.get('email', ''),
+                "user_display_name": user.get('display_name', ''),
+                "settings": {
+                    "mode": game['mode'],
+                    "difficulty": game['difficulty'],
+                    "input_type": game['input_type'],
+                    "duration": game['duration']
+                },
+                "results": {
+                    "score": game['score'],
+                    "accuracy": round(accuracy, 1),
+                    "correct_count": game['correct_count'],
+                    "total_count": game['total_count'],
+                    "best_streak": game['best_streak'],
+                    "avg_time": round(avg_time, 2)
+                },
+                "history": game['history']
+            }
+
+            # Save to database
+            user_uid = user.get('uid')
+            success = save_game_result(user_uid, GAME_SLUG, game_data)
+
+            if success:
+                st.success("✅ **Score saved to leaderboard!**")
+                game['result_saved'] = True
+            else:
+                st.warning("⚠️ Failed to save score. Please try again.")
+
+        else:
+            # Not authenticated - show message
+            st.info("💡 **Sign in to save your score and appear on the leaderboard!**")
+
+    except Exception as e:
+        st.error(f"❌ Error saving result: {str(e)}")
+
+
 def render_results_screen():
     """Render game over / results screen"""
     game = st.session_state.binary_game
@@ -480,9 +549,13 @@ def render_results_screen():
 
     # Calculate final stats
     accuracy = (game['correct_count'] / game['total_count'] * 100) if game['total_count'] > 0 else 0
+    avg_time = sum(h['time'] for h in game['history']) / len(game['history']) if game['history'] else 0
     emoji, message = get_performance_rating(accuracy)
 
     st.markdown(f"## {emoji} {message}")
+
+    # Save to database if user is authenticated
+    _save_game_result_to_db(game, accuracy, avg_time)
 
     # Display final stats
     col1, col2, col3 = st.columns(3)

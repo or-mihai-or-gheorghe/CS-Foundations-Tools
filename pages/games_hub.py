@@ -2,6 +2,8 @@
 
 import streamlit as st
 from tools.games import binary_speed_challenge
+from components.auth_ui import render_auth_ui, render_auth_status_badge
+from components.leaderboard import render_leaderboard
 
 # ========================= Games Registry =========================
 
@@ -23,7 +25,8 @@ def init_games_hub_state():
     if 'games_hub' not in st.session_state:
         st.session_state.games_hub = {
             'selected_game': None,
-            'show_landing': True
+            'show_landing': True,
+            'active_tab': 'games'  # 'games' or 'leaderboard'
         }
 
 def select_game(game_name: str):
@@ -83,6 +86,9 @@ def render_landing_page():
 
     st.title("🎮 Games Hub")
 
+    # Authentication UI at the top
+    render_auth_ui()
+
     st.markdown("""
     Welcome to the **CS Fundamentals Games Hub**!
 
@@ -90,11 +96,19 @@ def render_landing_page():
     Challenge yourself, compete against the clock, and master binary operations through fun gameplay!
     """)
 
-    st.subheader(f"🎯 Available Games ({len(AVAILABLE_GAMES)})")
+    # Tab selection
+    tab1, tab2 = st.tabs(["🎮 Games", "🏆 Leaderboard"])
 
-    # Render each game card
-    for game_name, game_info in AVAILABLE_GAMES.items():
-        render_game_card(game_name, game_info)
+    with tab1:
+        st.subheader(f"🎯 Available Games ({len(AVAILABLE_GAMES)})")
+
+        # Render each game card
+        for game_name, game_info in AVAILABLE_GAMES.items():
+            render_game_card(game_name, game_info)
+
+    with tab2:
+        # Render leaderboard
+        render_leaderboard()
 
 def render_game_screen(game_name: str):
     """Render the selected game with a back button"""
@@ -102,8 +116,8 @@ def render_game_screen(game_name: str):
     game_info = AVAILABLE_GAMES[game_name]
     game_module = game_info['module']
 
-    # Add back button at the top
-    col1, col2, col3 = st.columns([1, 4, 1])
+    # Add back button and auth status at the top
+    col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
         if st.button("← Back to Games", key="back_to_games"):
             # Reset any game state when returning
@@ -111,6 +125,10 @@ def render_game_screen(game_name: str):
                 st.session_state.binary_game['active'] = False
             return_to_landing()
             st.rerun()
+
+    with col3:
+        # Show compact auth status
+        render_auth_status_badge()
 
     # Render the game
     if hasattr(game_module, 'render'):

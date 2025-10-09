@@ -37,6 +37,16 @@ This application provides hands-on, interactive tools for learning low-level com
   - Visual Gray-code ordered K-maps with torus wrapping
   - Prime implicant selection and SOP minimization
 
+### Games Hub
+- **Binary Speed Challenge** - 60-second timed game to practice binary/decimal conversions
+  - Multiple difficulty levels (Easy to Expert)
+  - Streak multipliers and speed bonuses
+  - **Leaderboard System** - Persistent rankings with Firebase integration
+    - Sign in with @ase.ro Google account
+    - Global and per-game leaderboards
+    - Filter by difficulty, date, and user
+    - Anonymous play supported (results not saved)
+
 ## Installation
 
 ### Prerequisites
@@ -84,24 +94,27 @@ Each tool provides:
 ```
 CS-Foundations-Tools/
 ├── app.py                  # Main Streamlit application
+├── pages/                  # Page modules
+│   ├── foundations.py      # Educational tools page
+│   └── games_hub.py        # Games and leaderboard page
 ├── tools/                  # Tool modules
 │   ├── __init__.py
 │   ├── binary_to_decimal.py
-│   ├── decimal_to_binary.py
 │   ├── gray_code_converter.py
-│   ├── multi_format_converter.py
-│   ├── raw_binary_arithmetic.py
-│   ├── twos_complement_arithmetic.py
-│   ├── bcd_arithmetic.py
 │   ├── floating_point.py
-│   ├── decimal_converter.py
-│   ├── special_values.py
-│   ├── fp_arithmetic.py
 │   ├── hamming_encode.py
-│   ├── hamming_decode.py
-│   ├── crc_encode.py
-│   ├── crc_decode.py
-│   └── logic_kmap_sop.py
+│   ├── logic_kmap_sop.py
+│   └── games/              # Game modules
+│       ├── binary_speed_challenge.py
+│       └── game_utils.py
+├── firebase/               # Firebase integration
+│   ├── auth.py             # Authentication (Google OAuth + mock)
+│   ├── database.py         # Realtime Database operations
+│   ├── config.py           # Firebase configuration
+│   └── mock_auth.py        # Local development mock auth
+├── components/             # Reusable UI components
+│   ├── auth_ui.py          # Sign-in/sign-out interface
+│   └── leaderboard.py      # Leaderboard display
 ├── requirements.txt        # Python dependencies
 └── README.md              # This file
 ```
@@ -110,6 +123,7 @@ CS-Foundations-Tools/
 
 - **Streamlit** - Web application framework
 - **NumPy** - Numerical computing for matrix operations
+- **Firebase** - Authentication and Realtime Database for leaderboards
 - **Python 3** - Core programming language
 
 ## Educational Context
@@ -144,6 +158,116 @@ This application is designed for students and educators studying:
 - Demonstrates complete conversion process
 - Shows precision loss analysis
 - Converts results back for verification
+
+## Firebase Setup (for Leaderboard Feature)
+
+The leaderboard system uses Firebase Realtime Database with Google Authentication restricted to `@ase.ro` domain.
+
+### Local Development (Mock Mode)
+
+For local testing without Firebase:
+
+1. Create `.streamlit/secrets.toml`:
+```toml
+[firebase]
+use_mock_auth = true
+api_key = "mock"
+auth_domain = "mock"
+database_url = "mock"
+project_id = "mock"
+storage_bucket = "mock"
+messaging_sender_id = "mock"
+app_id = "mock"
+allowed_test_emails = ["test@ase.ro", "student@ase.ro"]
+```
+
+2. Sign in with any email from `allowed_test_emails` to test locally
+
+### Production Setup
+
+1. **Create Firebase Project:**
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Create new project: `cs-foundations-tools`
+   - Disable Google Analytics (optional)
+
+2. **Enable Authentication:**
+   - Navigate to **Authentication** → **Get Started**
+   - Click **Sign-in method** tab
+   - Enable **Google** provider
+   - Add authorized domain: `cs-fundamentals.streamlit.app`
+
+3. **Enable Realtime Database:**
+   - Navigate to **Realtime Database** → **Create Database**
+   - Choose location: `europe-west1` (or closest to your users)
+   - Start in **locked mode**
+
+4. **Set Security Rules:**
+   - Go to **Realtime Database** → **Rules** tab
+   - Replace with:
+```json
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth.uid === $uid"
+      }
+    },
+    "games": {
+      "$game_slug": {
+        ".read": "auth != null",
+        "$game_id": {
+          ".write": "auth != null && !data.exists() && newData.child('user_uid').val() === auth.uid"
+        }
+      }
+    },
+    "leaderboard": {
+      ".read": true,
+      ".write": false
+    }
+  }
+}
+```
+   - Click **Publish**
+
+5. **Get Configuration:**
+   - Go to **Project Settings** (gear icon) → **General**
+   - Under "Your apps" → Click **Web app** (`</>`)
+   - Register app: `CS Foundations Tools`
+   - Copy the `firebaseConfig` object
+
+6. **Get Service Account Key:**
+   - Go to **Project Settings** → **Service accounts**
+   - Click **Generate new private key**
+   - Download JSON file (keep it secure!)
+
+7. **Configure Streamlit Secrets:**
+
+For **Streamlit Cloud** (production):
+   - Go to app settings → Secrets
+   - Add:
+```toml
+[firebase]
+use_mock_auth = false
+
+# From firebaseConfig
+api_key = "AIza..."
+auth_domain = "your-project.firebaseapp.com"
+database_url = "https://your-project-default-rtdb.firebaseio.com"
+project_id = "your-project-id"
+storage_bucket = "your-project.appspot.com"
+messaging_sender_id = "123456789"
+app_id = "1:123456789:web:abcdef..."
+
+# From service account JSON
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "firebase-adminsdk-...@your-project.iam.gserviceaccount.com"
+client_id = "..."
+client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/..."
+```
+
+**Important:** Never commit the service account JSON or secrets to git! The `.gitignore` already excludes `.streamlit/secrets.toml`.
 
 ## Contributing
 

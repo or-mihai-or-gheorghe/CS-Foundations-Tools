@@ -1,2 +1,6 @@
 streamlit
 numpy
+firebase-admin
+Pyrebase4
+python-jwt
+requests

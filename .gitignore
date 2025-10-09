@@ -18,3 +18,14 @@ env/
 # Merged code files
 merge_code.py
 merged_code.py
+
+# Firebase implementation plan (development tracking)
+FIREBASE_IMPLEMENTATION_PLAN.md
+
+# Streamlit secrets (NEVER commit)
+.streamlit/secrets.toml
+
+# Firebase service account keys (NEVER commit)
+*serviceAccountKey*.json
+*firebase-adminsdk*.json
+firebase-credentials.json
