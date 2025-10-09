@@ -177,12 +177,13 @@ def update_leaderboard(user_uid: str, game_slug: str, game_result: Dict) -> bool
         best_single_score = max(current_data.get("best_single_score", 0), results.get("score", 0))
         best_streak = max(current_data.get("best_streak", 0), results.get("best_streak", 0))
 
-        # Get user info
-        user_data = st.session_state.get("user", {})
+        # Get user info - use get_current_user to support both auth methods
+        from .auth import get_current_user as get_user
+        user_data = get_user() or {}
 
         leaderboard_entry = {
             "email": user_data.get("email", ""),
-            "display_name": user_data.get("display_name", ""),
+            "display_name": user_data.get("display_name", "Unknown"),
             "total_score": total_score,
             "games_played": games_played,
             "best_single_score": best_single_score,
@@ -197,12 +198,12 @@ def update_leaderboard(user_uid: str, game_slug: str, game_result: Dict) -> bool
         diff_ref = get_database_reference(f"leaderboard/{game_slug}/by_difficulty/{difficulty}/{user_uid}")
         diff_ref.set(leaderboard_entry)
 
-        # Update global leaderboard
+        # Update global leaderboard (reuse user_data from above)
         global_ref = get_database_reference(f"leaderboard/global/all_time/{user_uid}")
         global_data = global_ref.get() or {}
 
         global_data["email"] = user_data.get("email", "")
-        global_data["display_name"] = user_data.get("display_name", "")
+        global_data["display_name"] = user_data.get("display_name", "Unknown")
         global_data["total_score_all_games"] = global_data.get("total_score_all_games", 0) + results.get("score", 0)
         global_data["total_games_all_types"] = global_data.get("total_games_all_types", 0) + 1
 
@@ -260,10 +261,11 @@ def _update_leaderboard_mock(user_uid: str, game_slug: str, game_result: Dict) -
         entry["best_single_score"] = max(entry["best_single_score"], results.get("score", 0))
         entry["best_streak"] = max(entry["best_streak"], results.get("best_streak", 0))
 
-        # Get user info
-        user_data = st.session_state.get("user", {})
+        # Get user info - use get_current_user to support both auth methods
+        from .auth import get_current_user as get_user
+        user_data = get_user() or {}
         entry["email"] = user_data.get("email", "")
-        entry["display_name"] = user_data.get("display_name", "")
+        entry["display_name"] = user_data.get("display_name", "Unknown")
 
         # Update difficulty-specific
         mock_db["leaderboard"][game_slug]["by_difficulty"][difficulty][user_uid] = entry.copy()
@@ -285,7 +287,7 @@ def _update_leaderboard_mock(user_uid: str, game_slug: str, game_result: Dict) -
         global_lb[user_uid]["total_games_all_types"] += 1
         global_lb[user_uid]["games_breakdown"][game_slug] = global_lb[user_uid]["games_breakdown"].get(game_slug, 0) + 1
         global_lb[user_uid]["email"] = user_data.get("email", "")
-        global_lb[user_uid]["display_name"] = user_data.get("display_name", "")
+        global_lb[user_uid]["display_name"] = user_data.get("display_name", "Unknown")
 
         return True
 
