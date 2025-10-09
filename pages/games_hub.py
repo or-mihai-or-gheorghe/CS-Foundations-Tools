@@ -2,7 +2,7 @@
 
 import streamlit as st
 from tools.games import binary_speed_challenge
-from components.auth_ui import render_auth_ui, render_auth_status_badge
+from components.streamlit_auth import render_auth_ui, render_auth_status_badge
 from components.leaderboard import render_leaderboard
 
 # ========================= Games Registry =========================

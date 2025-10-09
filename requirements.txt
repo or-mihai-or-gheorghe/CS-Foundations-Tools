@@ -1,6 +1,5 @@
-streamlit
+streamlit>=1.42.0
 numpy
 firebase-admin
-Pyrebase4
-python-jwt
+Authlib>=1.3.2
 requests

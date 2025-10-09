@@ -34,11 +34,27 @@ def validate_ase_email(email: str) -> bool:
 
 def get_current_user() -> Optional[Dict]:
     """
-    Get the currently authenticated user from session state
+    Get the currently authenticated user from session state or Streamlit auth
 
     Returns:
         Dict: User object if authenticated, None otherwise
     """
+    # Check if using Streamlit native auth
+    try:
+        if st.user.is_logged_in:
+            # Return Streamlit user as Firebase-compatible format
+            return {
+                "uid": st.user.email.replace("@", "_").replace(".", "_"),
+                "email": st.user.email,
+                "display_name": st.user.name or st.user.email.split("@")[0],
+                "photo_url": "",
+                "is_authenticated": True,
+                "is_mock": False
+            }
+    except:
+        pass  # Streamlit auth not configured
+
+    # Fall back to session state (mock mode)
     if 'user' not in st.session_state:
         return None
 
