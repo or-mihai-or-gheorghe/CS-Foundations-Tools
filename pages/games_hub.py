@@ -93,10 +93,6 @@ def render_landing_page():
     # Compact welcome message
     st.caption("Test your CS skills with interactive games. Compete and climb the leaderboard!")
 
-    # Global stats at the top
-    render_game_stats()
-    st.markdown("---")
-
     # Tab selection
     tab1, tab2, tab3 = st.tabs(["🎮 Games", "🏆 Leaderboard", "📊 Stats"])
 
@@ -112,8 +108,7 @@ def render_landing_page():
         render_leaderboard()
 
     with tab3:
-        # Render detailed stats
-        st.markdown("### 📈 Detailed Statistics")
+        # Render stats (no redundant titles - tab name is clear)
         render_game_stats()
         st.markdown("---")
         render_per_game_stats()
