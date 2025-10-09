@@ -6,6 +6,7 @@ Uses st.login() and st.logout() with Google OAuth
 
 import streamlit as st
 from firebase import get_current_user as get_firebase_user, sign_in as firebase_sign_in, sign_out as firebase_sign_out
+from firebase.environment import is_local_environment, should_use_mock_auth
 import logging
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,10 @@ def validate_ase_domain(email: str) -> bool:
 def render_auth_ui():
     """
     Render authentication UI using Streamlit's native auth
+    In local environment, auth is optional (show option to play anonymously)
     """
+    is_local = is_local_environment()
+
     if st.user.is_logged_in:
         # User is signed in
         _render_user_profile()
@@ -90,7 +94,12 @@ def render_auth_ui():
         sync_to_firebase()
     else:
         # User is not signed in
-        _render_sign_in()
+        if is_local:
+            # Local: Show that auth is optional
+            _render_sign_in_local()
+        else:
+            # Cloud: Show regular sign-in
+            _render_sign_in()
 
 
 def _render_user_profile():
@@ -131,6 +140,18 @@ def _render_sign_in():
 
         if st.button("🔑 Log in with Google", on_click=st.login, type="primary", use_container_width=True):
             pass  # st.login handles the redirect
+
+
+def _render_sign_in_local():
+    """Render sign-in for local environment - auth is optional"""
+    with st.expander("🔐 Sign in (Optional - Local Dev)", expanded=False):
+        st.caption("💻 Local mode: You can play without signing in")
+        st.caption("Sign in to test leaderboard features with mock data")
+
+        if st.button("🔑 Log in (Mock Auth)", on_click=st.login, type="primary", use_container_width=True):
+            pass  # st.login handles the redirect
+
+        st.info("ℹ️ In local dev, auth is optional. Games can be played anonymously.")
 
 
 def render_auth_status_badge():

@@ -12,6 +12,7 @@ from .database import (
     get_user_stats,
     get_user_game_history
 )
+from .stats import record_game_played, get_global_stats
 
 __all__ = [
     'get_firebase_config',
@@ -23,5 +24,7 @@ __all__ = [
     'save_game_result',
     'get_leaderboard',
     'get_user_stats',
-    'get_user_game_history'
+    'get_user_game_history',
+    'record_game_played',
+    'get_global_stats'
 ]

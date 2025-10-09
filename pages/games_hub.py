@@ -4,6 +4,7 @@ import streamlit as st
 from tools.games import binary_speed_challenge
 from components.streamlit_auth import render_auth_ui, render_auth_status_badge
 from components.leaderboard import render_leaderboard
+from components.game_stats import render_game_stats, render_per_game_stats
 
 # ========================= Games Registry =========================
 
@@ -92,8 +93,12 @@ def render_landing_page():
     # Compact welcome message
     st.caption("Test your CS skills with interactive games. Compete and climb the leaderboard!")
 
+    # Global stats at the top
+    render_game_stats()
+    st.markdown("---")
+
     # Tab selection
-    tab1, tab2 = st.tabs(["🎮 Games", "🏆 Leaderboard"])
+    tab1, tab2, tab3 = st.tabs(["🎮 Games", "🏆 Leaderboard", "📊 Stats"])
 
     with tab1:
         st.subheader(f"🎯 Available Games ({len(AVAILABLE_GAMES)})")
@@ -105,6 +110,13 @@ def render_landing_page():
     with tab2:
         # Render leaderboard
         render_leaderboard()
+
+    with tab3:
+        # Render detailed stats
+        st.markdown("### 📈 Detailed Statistics")
+        render_game_stats()
+        st.markdown("---")
+        render_per_game_stats()
 
 def render_game_screen(game_name: str):
     """Render the selected game with a back button"""

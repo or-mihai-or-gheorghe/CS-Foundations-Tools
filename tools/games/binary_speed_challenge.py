@@ -482,6 +482,7 @@ def render_game_screen():
 def _save_game_result_to_db(game: dict, accuracy: float, avg_time: float):
     """
     Save game result to Firebase database if user is authenticated
+    Also records global stats for all games (authenticated + anonymous)
 
     Args:
         game: Game state dictionary
@@ -490,11 +491,15 @@ def _save_game_result_to_db(game: dict, accuracy: float, avg_time: float):
     """
     try:
         # Import Firebase functions
-        from firebase import get_current_user, save_game_result
+        from firebase import get_current_user, save_game_result, record_game_played
 
         user = get_current_user()
+        is_authenticated = user and user.get('is_authenticated')
 
-        if user and user.get('is_authenticated'):
+        # Record global stats (for all games, authenticated or not)
+        record_game_played(GAME_SLUG, authenticated=is_authenticated)
+
+        if is_authenticated:
             # Check if already saved (prevent duplicate saves)
             if 'result_saved' in game and game['result_saved']:
                 return
