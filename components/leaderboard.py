@@ -154,9 +154,11 @@ def _render_leaderboard_entry(entry: Dict, is_current_user: bool, game_specific:
         is_current_user: Whether this is the current user
         game_specific: Whether this is a game-specific leaderboard
     """
+    import html as html_module
+
     rank = entry.get('rank', '?')
-    display_name = entry.get('display_name', 'Unknown')
-    email = entry.get('email', '')
+    display_name = html_module.escape(entry.get('display_name', 'Unknown'))
+    email = html_module.escape(entry.get('email', ''))
 
     # Rank emoji
     rank_emoji = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"#{rank}"

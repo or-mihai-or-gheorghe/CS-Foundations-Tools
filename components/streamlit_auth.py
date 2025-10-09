@@ -93,29 +93,27 @@ def render_auth_ui():
 
 def _render_user_profile():
     """Render signed-in user profile - compact"""
+    # Get user info safely
+    user_email = getattr(st.user, 'email', None)
+    user_name = getattr(st.user, 'name', None)
+
+    if not user_email:
+        st.error("Unable to retrieve user email")
+        return
+
     col1, col2 = st.columns([4, 1])
 
     with col1:
         # Validate domain
-        if not validate_ase_domain(st.user.email):
+        if not validate_ase_domain(user_email):
             st.error("⚠️ Only @ase.ro email addresses are allowed")
             st.button("Sign Out", on_click=st.logout, type="secondary")
             return
 
-        st.markdown(f"""
-        <div style="
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 0;
-        ">
-            <span style="font-size: 18px;">✅</span>
-            <div>
-                <div style="font-weight: 500; font-size: 14px;">{st.user.name or st.user.email.split('@')[0]}</div>
-                <div style="font-size: 12px; color: #666;">{st.user.email}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Display user info as simple text (no HTML to avoid issues)
+        display_name = user_name or user_email.split('@')[0]
+        st.success(f"✅ {display_name}")
+        st.caption(user_email)
 
     with col2:
         if st.button("Sign Out", type="secondary", key="signout_native"):
