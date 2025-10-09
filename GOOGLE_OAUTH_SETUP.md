@@ -140,20 +140,32 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/fireba
 
 ## Step 4: Domain Restriction (@ase.ro only)
 
-The app validates `@ase.ro` domain in the code. To enforce this at OAuth level:
+**IMPORTANT**: The app now **enforces** @ase.ro domain validation at the code level. Users with non-@ase.ro emails will be blocked and forced to sign out.
 
-**Option A: OAuth Consent Screen (Recommended)**
+To also restrict at the Google OAuth level (recommended for better UX):
+
+### Method 1: HD Parameter (Implemented)
+The app already uses `hd=ase.ro` parameter which:
+- Suggests @ase.ro accounts to users
+- Pre-filters the account selection screen
+- Note: This is a hint, not enforcement (users can still select other accounts)
+
+### Method 2: Google Workspace - Internal App (Best)
+If ASE has Google Workspace:
+1. In OAuth consent screen, change User Type to **"Internal"**
+2. This **completely restricts** access to @ase.ro domain users only
+3. No other emails can even attempt to sign in
+
+### Method 3: Authorized Domains (Hint only)
 1. In OAuth consent screen settings
 2. Under "Authorized domains", add `ase.ro`
-3. This hints to users that only ase.ro emails should be used
+3. This is informational only - doesn't prevent other emails
 
-**Option B: Google Workspace (if using Internal app type)**
-1. Use "Internal" user type in OAuth consent
-2. Only users from your Google Workspace domain can access
-
-**Option C: Code validation (Already implemented)**
-- The app checks email domain and rejects non-@ase.ro users
-- This works for both options above
+### Code-Level Enforcement (Already Active)
+- The app checks email domain after sign-in
+- Non-@ase.ro users see: "⛔ Access Denied"
+- They are forced to sign out
+- Prevents any access to games or data
 
 ## Troubleshooting
 

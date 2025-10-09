@@ -83,11 +83,27 @@ def render_auth_ui():
     """
     Render authentication UI using Streamlit's native auth
     In local environment, auth is optional (show option to play anonymously)
+    Enforces @ase.ro domain restriction
     """
     is_local = is_local_environment()
 
     if st.user.is_logged_in:
-        # User is signed in
+        # ENFORCE domain validation
+        user_email = getattr(st.user, 'email', None)
+
+        if user_email and not validate_ase_domain(user_email):
+            # Invalid domain - force sign out
+            st.error(f"⛔ Access Denied: Only @ase.ro email addresses are allowed")
+            st.error(f"You signed in with: {user_email}")
+            st.warning("Please sign in with your @ase.ro or subdomain account (e.g., @csie.ase.ro)")
+
+            if st.button("Sign Out", type="primary", use_container_width=True):
+                firebase_sign_out()
+                st.logout()
+
+            st.stop()  # Prevent further execution
+
+        # User is signed in with valid domain
         _render_user_profile()
 
         # Sync to Firebase for database operations
@@ -103,7 +119,7 @@ def render_auth_ui():
 
 
 def _render_user_profile():
-    """Render signed-in user profile - compact"""
+    """Render signed-in user profile - compact (domain already validated)"""
     # Get user info safely
     user_email = getattr(st.user, 'email', None)
     user_name = getattr(st.user, 'name', None)
@@ -115,12 +131,6 @@ def _render_user_profile():
     col1, col2 = st.columns([4, 1])
 
     with col1:
-        # Validate domain
-        if not validate_ase_domain(user_email):
-            st.error("⚠️ Only @ase.ro email addresses are allowed")
-            st.button("Sign Out", on_click=st.logout, type="secondary")
-            return
-
         # Display user info as simple text (no HTML to avoid issues)
         display_name = user_name or user_email.split('@')[0]
         st.success(f"✅ {display_name}")
