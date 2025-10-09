@@ -86,15 +86,11 @@ def render_landing_page():
 
     st.title("🎮 Games Hub")
 
-    # Authentication UI at the top
+    # Authentication UI at the top (compact)
     render_auth_ui()
 
-    st.markdown("""
-    Welcome to the **CS Fundamentals Games Hub**!
-
-    Test your skills with interactive games designed to reinforce computer science concepts.
-    Challenge yourself, compete against the clock, and master binary operations through fun gameplay!
-    """)
+    # Compact welcome message
+    st.caption("Test your CS skills with interactive games. Compete and climb the leaderboard!")
 
     # Tab selection
     tab1, tab2 = st.tabs(["🎮 Games", "🏆 Leaderboard"])
