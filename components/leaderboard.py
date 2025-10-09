@@ -19,6 +19,38 @@ AVAILABLE_GAMES = {
 }
 
 
+def obfuscate_email(email: str, current_user_email: Optional[str] = None) -> str:
+    """
+    Obfuscate email for non-logged users or other users
+    Shows first 3 chars, then ..., then domain
+
+    Args:
+        email: Email to obfuscate
+        current_user_email: Current user's email (show full if matching)
+
+    Returns:
+        str: Obfuscated email (e.g., "mih...@csie.ase.ro") or full email if it's the current user
+    """
+    if not email:
+        return "unknown"
+
+    # If this is the current user's email, show it in full
+    if current_user_email and email.lower() == current_user_email.lower():
+        return email
+
+    # Obfuscate: first 3 chars + "..." + domain
+    if '@' in email:
+        local_part, domain = email.rsplit('@', 1)
+        if len(local_part) <= 3:
+            # Very short email, just show first char
+            obfuscated = local_part[0] + "..."
+        else:
+            obfuscated = local_part[:3] + "..."
+        return f"{obfuscated}@{domain}"
+
+    return email
+
+
 def render_leaderboard(game_slug: Optional[str] = None):
     """
     Render leaderboard with filters
@@ -31,9 +63,10 @@ def render_leaderboard(game_slug: Optional[str] = None):
     # Render filters
     filters = _render_filters(game_slug)
 
-    # Get current user for highlighting
+    # Get current user for highlighting and email obfuscation
     current_user = get_current_user()
     current_uid = current_user.get('uid') if current_user else None
+    current_email = current_user.get('email') if current_user else None
 
     # Fetch leaderboard data
     try:
@@ -51,7 +84,7 @@ def render_leaderboard(game_slug: Optional[str] = None):
             return
 
         # Display leaderboard
-        _render_leaderboard_table(leaderboard_data, current_uid, filters['game_slug'])
+        _render_leaderboard_table(leaderboard_data, current_uid, current_email, filters['game_slug'])
 
         # Show user's rank if not in top 50
         if current_uid:
@@ -118,13 +151,14 @@ def _render_filters(default_game_slug: Optional[str] = None) -> Dict:
     }
 
 
-def _render_leaderboard_table(data: List[Dict], current_uid: Optional[str], game_slug: Optional[str]):
+def _render_leaderboard_table(data: List[Dict], current_uid: Optional[str], current_email: Optional[str], game_slug: Optional[str]):
     """
     Render leaderboard table
 
     Args:
         data: Leaderboard entries
         current_uid: Current user's UID (for highlighting)
+        current_email: Current user's email (for email obfuscation)
         game_slug: Game identifier (None for global)
     """
     # Determine columns based on game type
@@ -134,7 +168,7 @@ def _render_leaderboard_table(data: List[Dict], current_uid: Optional[str], game
 
         for entry in data:
             is_current_user = (entry.get('uid') == current_uid)
-            _render_leaderboard_entry(entry, is_current_user, game_specific=True)
+            _render_leaderboard_entry(entry, is_current_user, current_email, game_specific=True)
 
     else:
         # Global leaderboard
@@ -142,23 +176,27 @@ def _render_leaderboard_table(data: List[Dict], current_uid: Optional[str], game
 
         for entry in data:
             is_current_user = (entry.get('uid') == current_uid)
-            _render_leaderboard_entry(entry, is_current_user, game_specific=False)
+            _render_leaderboard_entry(entry, is_current_user, current_email, game_specific=False)
 
 
-def _render_leaderboard_entry(entry: Dict, is_current_user: bool, game_specific: bool):
+def _render_leaderboard_entry(entry: Dict, is_current_user: bool, current_email: Optional[str], game_specific: bool):
     """
     Render a single leaderboard entry
 
     Args:
         entry: Leaderboard entry data
         is_current_user: Whether this is the current user
+        current_email: Current user's email (for obfuscation logic)
         game_specific: Whether this is a game-specific leaderboard
     """
     import html as html_module
 
     rank = entry.get('rank', '?')
     display_name = html_module.escape(entry.get('display_name', 'Unknown'))
-    email = html_module.escape(entry.get('email', ''))
+    raw_email = entry.get('email', '')
+
+    # Obfuscate email unless it's the current user
+    email = html_module.escape(obfuscate_email(raw_email, current_email))
 
     # Rank emoji
     rank_emoji = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"#{rank}"

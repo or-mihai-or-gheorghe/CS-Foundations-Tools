@@ -15,17 +15,19 @@ logger = logging.getLogger(__name__)
 
 def validate_ase_email(email: str) -> bool:
     """
-    Validate that email belongs to @ase.ro domain
+    Validate that email belongs to @ase.ro domain or any subdomain
 
     Args:
         email: Email address to validate
 
     Returns:
-        bool: True if email ends with @ase.ro, False otherwise
+        bool: True if email ends with @ase.ro or subdomain (e.g., @csie.ase.ro)
     """
     if not email:
         return False
-    return email.lower().endswith("@ase.ro")
+    email_lower = email.lower()
+    # Accept @ase.ro and any subdomain like @csie.ase.ro, @stud.ase.ro, etc.
+    return email_lower.endswith(".ase.ro") or email_lower.endswith("@ase.ro")
 
 
 def is_email_allowed(email: str) -> bool:
