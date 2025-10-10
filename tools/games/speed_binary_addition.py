@@ -127,7 +127,8 @@ def init_game_state():
             'total_count': 0,
             'history': [],
             'last_result': None,
-            'result_saved': False
+            'result_saved': False,
+            'last_decimal_question': -10  # Track when last decimal question was shown
         }
 
 def reset_game():
@@ -147,7 +148,8 @@ def reset_game():
         'total_count': 0,
         'history': [],
         'last_result': None,
-        'result_saved': False
+        'result_saved': False,
+        'last_decimal_question': -10
     }
 
 def is_game_active() -> bool:
@@ -181,20 +183,25 @@ def generate_question():
     result_dec, carry_positions = calculate_binary_addition_with_carries(operand_a_dec, operand_b_dec)
     result_bin = bin(result_dec)[2:]
 
-    # 25% chance for binary+decimal question, 75% for binary+binary
-    question_type = random.choices(
-        ['binary_binary', 'binary_decimal'],
-        weights=[75, 25],
-        k=1
-    )[0]
+    # Determine question type: only show decimal if at least 5 questions since last decimal
+    questions_since_decimal = game['total_count'] - game['last_decimal_question']
+    can_show_decimal = questions_since_decimal >= 5
+
+    if can_show_decimal and random.random() < 0.25:
+        # Show binary+decimal question
+        question_type = 'binary_decimal'
+        game['last_decimal_question'] = game['total_count']
+    else:
+        # Show binary+binary question
+        question_type = 'binary_binary'
 
     if question_type == 'binary_binary':
         # Both operands shown in binary
         display_question = f"`{operand_a_bin}` + `{operand_b_bin}` = ?"
         question_text = f"{operand_a_bin} + {operand_b_bin}"
     else:
-        # Second operand shown in decimal with subscript (more prominent)
-        display_question = f"`{operand_a_bin}` + **{operand_b_dec}** (base 10) = ?"
+        # Second operand shown in decimal with HTML bold (more prominent)
+        display_question = f"`{operand_a_bin}` + <strong>{operand_b_dec}</strong> (base 10) = ?"
         question_text = f"{operand_a_bin} + {operand_b_dec}₁₀"
 
     # Generate multiple choice options if needed
