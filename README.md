@@ -37,15 +37,26 @@ This application provides hands-on, interactive tools for learning low-level com
   - Visual Gray-code ordered K-maps with torus wrapping
   - Prime implicant selection and SOP minimization
 
-### Games Hub
-- **Binary Speed Challenge** - 60-second timed game to practice binary/decimal conversions
+### Games Hub (2 games)
+Interactive timed games to practice and master binary operations with competitive leaderboards.
+
+- **Binary Speed Challenge** - Convert binary and decimal numbers at lightning speed
   - Multiple difficulty levels (Easy to Expert)
+  - Direct input or multiple choice modes
   - Streak multipliers and speed bonuses
-  - **Leaderboard System** - Persistent rankings with Firebase integration
-    - Sign in with @ase.ro Google account
-    - Global and per-game leaderboards
-    - Filter by difficulty, date, and user
-    - Anonymous play supported (results not saved)
+
+- **Speed Binary Addition** - Add binary numbers under time pressure
+  - Mix of binary+binary and binary+decimal problems
+  - Three difficulty levels (Easy, Advanced, Expert)
+  - Carry propagation visualization in results
+  - Direct input or multiple choice modes
+
+**Leaderboard & Statistics:**
+- Sign in with @ase.ro Google account to save scores
+- Global and per-game leaderboards with filtering
+- Real-time rankings and performance analytics
+- Detailed game statistics (total plays, average scores, trends)
+- Anonymous play supported (results not saved)
 
 ## Installation
 
@@ -106,6 +117,7 @@ CS-Foundations-Tools/
 │   ├── logic_kmap_sop.py
 │   └── games/              # Game modules
 │       ├── binary_speed_challenge.py
+│       ├── speed_binary_addition.py
 │       └── game_utils.py
 ├── firebase/               # Firebase integration
 │   ├── auth.py             # Authentication (Google OAuth + mock)
@@ -114,7 +126,9 @@ CS-Foundations-Tools/
 │   └── mock_auth.py        # Local development mock auth
 ├── components/             # Reusable UI components
 │   ├── auth_ui.py          # Sign-in/sign-out interface
-│   └── leaderboard.py      # Leaderboard display
+│   ├── streamlit_auth.py   # Streamlit native OAuth integration
+│   ├── leaderboard.py      # Leaderboard display
+│   └── game_stats.py       # Global and per-game statistics
 ├── requirements.txt        # Python dependencies
 └── README.md              # This file
 ```

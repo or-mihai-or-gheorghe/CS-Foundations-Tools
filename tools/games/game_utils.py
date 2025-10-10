@@ -164,3 +164,165 @@ def get_performance_rating(accuracy: float) -> Tuple[str, str]:
         return "📚", "Not Bad! Room for Improvement!"
     else:
         return "💪", "Keep Learning! You'll Get There!"
+
+# ========================= Speed Binary Addition Utilities =========================
+
+# Difficulty config for Speed Binary Addition (3-level system)
+ADDITION_DIFFICULTY_CONFIG = {
+    "Easy": {
+        "bit_min": 1,
+        "bit_max": 5,
+        "points": 10,
+        "description": "1-5 bits"
+    },
+    "Advanced": {
+        "bit_min": 1,
+        "bit_max": 8,
+        "points": 25,
+        "description": "1-8 bits"
+    },
+    "Expert": {
+        "bit_min": 1,
+        "bit_max": 12,
+        "points": 40,
+        "description": "1-12 bits"
+    }
+}
+
+def generate_addition_operand(difficulty: str) -> Tuple[int, str]:
+    """
+    Generate a random operand for binary addition based on difficulty.
+    Returns (decimal_value, binary_string)
+    """
+    config = ADDITION_DIFFICULTY_CONFIG[difficulty]
+    bit_length = random.randint(config["bit_min"], config["bit_max"])
+
+    # Generate number with the chosen bit length
+    if bit_length == 1:
+        decimal_val = random.randint(0, 1)
+    else:
+        # Ensure MSB is 1 to guarantee the bit length (except for 1-bit numbers)
+        min_val = 1 << (bit_length - 1)
+        max_val = (1 << bit_length) - 1
+        decimal_val = random.randint(min_val, max_val)
+
+    binary_str = bin(decimal_val)[2:]
+    return decimal_val, binary_str
+
+def calculate_binary_addition_with_carries(a: int, b: int) -> Tuple[int, List[int]]:
+    """
+    Perform binary addition and track carry positions.
+
+    Args:
+        a, b: Decimal integers to add
+
+    Returns:
+        (result, carry_positions): Result and list of bit positions where carries occurred
+    """
+    result = a + b
+    carry_positions = []
+
+    # Simulate binary addition to find carries
+    carry = 0
+    pos = 0
+
+    while a > 0 or b > 0 or carry > 0:
+        bit_a = a & 1
+        bit_b = b & 1
+
+        # If we have a carry out from this position
+        if bit_a + bit_b + carry >= 2:
+            carry_positions.append(pos)
+            carry = 1
+        else:
+            carry = 0
+
+        a >>= 1
+        b >>= 1
+        pos += 1
+
+    return result, carry_positions
+
+def format_carry_visualization(a_bin: str, b_bin: str, result_bin: str, carry_positions: List[int]) -> str:
+    """
+    Format carry visualization for display in results.
+
+    Args:
+        a_bin: First operand in binary (string)
+        b_bin: Second operand in binary (string)
+        result_bin: Result in binary (string)
+        carry_positions: List of bit positions where carries occurred
+
+    Returns:
+        String with carry markers (e.g., "  ¹ ¹  ")
+    """
+    if not carry_positions:
+        return ""
+
+    # Find the maximum length needed
+    max_len = max(len(a_bin), len(b_bin), len(result_bin))
+
+    # Build carry string from right to left
+    carry_str = [' '] * max_len
+    for pos in carry_positions:
+        # Convert position (from right) to index (from left)
+        idx = max_len - 1 - pos
+        if 0 <= idx < max_len:
+            carry_str[idx] = '¹'
+
+    return ''.join(carry_str)
+
+def generate_addition_distractors(correct_result: str, operand_a: int, operand_b: int, count: int = 3) -> List[str]:
+    """
+    Generate plausible wrong answers for binary addition.
+
+    Args:
+        correct_result: Correct binary result as string
+        operand_a, operand_b: The original operands (in decimal)
+        count: Number of distractors to generate
+
+    Returns:
+        List of distractor binary strings
+    """
+    distractors = set()
+    correct_int = int(correct_result, 2)
+
+    # Strategy 1: Wrong carry propagation (most common error)
+    # Add without considering all carries properly
+    wrong_carry = operand_a ^ operand_b  # XOR gives addition without carry
+    if wrong_carry != correct_int and wrong_carry > 0:
+        distractors.add(bin(wrong_carry)[2:])
+
+    # Strategy 2: Off-by-one errors
+    if correct_int > 0:
+        distractors.add(bin(correct_int - 1)[2:])
+    distractors.add(bin(correct_int + 1)[2:])
+
+    # Strategy 3: Bit flip error (flip random bit in correct answer)
+    if len(correct_result) > 0:
+        for _ in range(3):
+            bit_pos = random.randint(0, len(correct_result) - 1)
+            temp_list = list(correct_result)
+            temp_list[bit_pos] = '0' if temp_list[bit_pos] == '1' else '1'
+            distractors.add(''.join(temp_list))
+
+    # Strategy 4: Missing MSB (forgot final carry)
+    if len(correct_result) > 1:
+        distractors.add(correct_result[1:])
+
+    # Strategy 5: Extra bit error
+    distractors.add('1' + correct_result)
+
+    # Remove correct answer and empty strings
+    distractors.discard(correct_result)
+    distractors = {d for d in distractors if d and d != '0' * len(d)}
+
+    # If we don't have enough, add some random variations
+    while len(distractors) < count:
+        noise = random.randint(-3, 3)
+        candidate = max(1, correct_int + noise)
+        if candidate != correct_int:
+            distractors.add(bin(candidate)[2:])
+
+    # Return random sample
+    return random.sample(list(distractors), min(count, len(distractors)))

@@ -1,7 +1,7 @@
 # pages/1_🎮_Games_Hub.py
 
 import streamlit as st
-from tools.games import binary_speed_challenge
+from tools.games import binary_speed_challenge, speed_binary_addition
 from components.streamlit_auth import render_auth_ui, render_auth_status_badge
 from components.leaderboard import render_leaderboard
 from components.game_stats import render_game_stats, render_per_game_stats
@@ -16,6 +16,14 @@ AVAILABLE_GAMES = {
         "difficulty": "Easy to Expert",
         "duration": "60 seconds",
         "skills": ["Binary Conversion", "Speed", "Accuracy"]
+    },
+    "Speed Binary Addition": {
+        "module": speed_binary_addition,
+        "description": "Add binary numbers at lightning speed! Mix of binary+binary and binary+decimal problems. Build streaks and master carry propagation.",
+        "emoji": "➕",
+        "difficulty": "Easy to Expert",
+        "duration": "60 seconds",
+        "skills": ["Binary Addition", "Carry Logic", "Speed"]
     }
 }
 
@@ -126,6 +134,8 @@ def render_game_screen(game_name: str):
             # Reset any game state when returning
             if 'binary_game' in st.session_state:
                 st.session_state.binary_game['active'] = False
+            if 'addition_game' in st.session_state:
+                st.session_state.addition_game['active'] = False
             return_to_landing()
             st.rerun()
 
