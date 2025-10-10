@@ -167,24 +167,34 @@ def generate_question():
     game = st.session_state.addition_game
     difficulty = game['difficulty']
 
-    # Generate two random operands
+    # Generate two random operands (ensure both > 0)
     operand_a_dec, operand_a_bin = generate_addition_operand(difficulty)
     operand_b_dec, operand_b_bin = generate_addition_operand(difficulty)
+
+    # Ensure no zero operands
+    while operand_a_dec == 0:
+        operand_a_dec, operand_a_bin = generate_addition_operand(difficulty)
+    while operand_b_dec == 0:
+        operand_b_dec, operand_b_bin = generate_addition_operand(difficulty)
 
     # Calculate result with carry tracking
     result_dec, carry_positions = calculate_binary_addition_with_carries(operand_a_dec, operand_b_dec)
     result_bin = bin(result_dec)[2:]
 
-    # Randomly choose question type: binary+binary or binary+decimal
-    question_type = random.choice(['binary_binary', 'binary_decimal'])
+    # 25% chance for binary+decimal question, 75% for binary+binary
+    question_type = random.choices(
+        ['binary_binary', 'binary_decimal'],
+        weights=[75, 25],
+        k=1
+    )[0]
 
     if question_type == 'binary_binary':
         # Both operands shown in binary
         display_question = f"`{operand_a_bin}` + `{operand_b_bin}` = ?"
         question_text = f"{operand_a_bin} + {operand_b_bin}"
     else:
-        # Second operand shown in decimal with subscript
-        display_question = f"`{operand_a_bin}` + `{operand_b_dec}`₁₀ = ?"
+        # Second operand shown in decimal with subscript (more prominent)
+        display_question = f"`{operand_a_bin}` + **{operand_b_dec}** (base 10) = ?"
         question_text = f"{operand_a_bin} + {operand_b_dec}₁₀"
 
     # Generate multiple choice options if needed

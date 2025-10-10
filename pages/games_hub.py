@@ -128,7 +128,7 @@ def render_game_screen(game_name: str):
     game_module = game_info['module']
 
     # Add back button and auth status at the top
-    col1, col2, col3 = st.columns([1, 3, 1])
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if st.button("← Back to Games", key="back_to_games"):
             # Reset any game state when returning

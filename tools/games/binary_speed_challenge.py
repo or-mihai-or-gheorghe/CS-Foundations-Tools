@@ -7,8 +7,8 @@ import re
 from typing import Optional
 from datetime import datetime
 from .game_utils import (
-    DIFFICULTY_CONFIG,
-    generate_random_number,
+    ADDITION_DIFFICULTY_CONFIG,
+    generate_addition_operand,
     generate_distractors_decimal,
     generate_distractors_binary,
     calculate_score,
@@ -167,11 +167,11 @@ def generate_question():
     """Generate a new question based on game settings"""
     game = st.session_state.binary_game
 
-    # Generate unique number (avoid duplicates)
+    # Generate unique number (avoid duplicates, ensure > 0)
     max_attempts = 50
     for _ in range(max_attempts):
-        decimal_val, binary_str = generate_random_number(game['difficulty'])
-        if decimal_val not in game['asked_numbers']:
+        decimal_val, binary_str = generate_addition_operand(game['difficulty'])
+        if decimal_val not in game['asked_numbers'] and decimal_val > 0:
             break
 
     # Add to asked numbers
@@ -242,7 +242,7 @@ def check_answer(user_answer: str, is_skip: bool = False) -> bool:
         game['best_streak'] = max(game['best_streak'], game['streak'])
 
         # Calculate score
-        base_points = DIFFICULTY_CONFIG[game['difficulty']]['points']
+        base_points = ADDITION_DIFFICULTY_CONFIG[game['difficulty']]['points']
         points = calculate_score(base_points, answer_time, game['streak'])
         game['score'] += points
 
@@ -330,12 +330,12 @@ def render_setup_screen():
     with col2:
         difficulty = st.radio(
             "**Difficulty**",
-            ["Easy", "Medium", "Hard", "Expert"],
+            ["Easy", "Advanced", "Expert"],
             help="Higher difficulty = more points per question"
         )
 
     # Show difficulty info
-    config = DIFFICULTY_CONFIG[difficulty]
+    config = ADDITION_DIFFICULTY_CONFIG[difficulty]
     st.info(f"**{difficulty}**: {config['description']} • {config['points']} points per correct answer")
 
     # Show Expert mode warning
@@ -344,9 +344,9 @@ def render_setup_screen():
 
     input_type = st.radio(
         "**Input Type**",
-        ["Direct Input", "Multiple Choice"],
+        ["Multiple Choice", "Direct Input"],
         horizontal=True,
-        help="Direct input is faster but more challenging"
+        help="Multiple choice is easier, direct input is faster"
     )
 
     if st.button("🚀 Start Game", type="primary", use_container_width=True):
