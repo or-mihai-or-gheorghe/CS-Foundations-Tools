@@ -184,8 +184,9 @@ def generate_question():
     result_bin = bin(result_dec)[2:]
 
     # Determine question type: only show decimal if at least 5 questions since last decimal
+    # Also avoid showing 1 in base 10 (trivial and confusing)
     questions_since_decimal = game['total_count'] - game['last_decimal_question']
-    can_show_decimal = questions_since_decimal >= 5
+    can_show_decimal = questions_since_decimal >= 5 and operand_b_dec > 1
 
     if can_show_decimal and random.random() < 0.25:
         # Show binary+decimal question
@@ -200,8 +201,8 @@ def generate_question():
         display_question = f"`{operand_a_bin}` + `{operand_b_bin}` = ?"
         question_text = f"{operand_a_bin} + {operand_b_bin}"
     else:
-        # Second operand shown in decimal with HTML bold (more prominent)
-        display_question = f"`{operand_a_bin}` + <strong>{operand_b_dec}</strong> (base 10) = ?"
+        # Second operand shown in decimal with subscript
+        display_question = f"`{operand_a_bin}` + {operand_b_dec}<sub>10</sub> = ?"
         question_text = f"{operand_a_bin} + {operand_b_dec}₁₀"
 
     # Generate multiple choice options if needed
