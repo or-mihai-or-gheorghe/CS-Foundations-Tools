@@ -211,6 +211,18 @@ def update_leaderboard(user_uid: str, game_slug: str, game_result: Dict) -> bool
             global_data["games_breakdown"] = {}
 
         global_data["games_breakdown"][game_slug] = global_data["games_breakdown"].get(game_slug, 0) + 1
+
+        # Track best score per game for fair leaderboard sorting
+        if "best_scores_per_game" not in global_data:
+            global_data["best_scores_per_game"] = {}
+
+        current_game_score = results.get("score", 0)
+        previous_best = global_data["best_scores_per_game"].get(game_slug, 0)
+        global_data["best_scores_per_game"][game_slug] = max(previous_best, current_game_score)
+
+        # Calculate sum of best scores for leaderboard ranking
+        global_data["best_scores_sum"] = sum(global_data["best_scores_per_game"].values())
+
         global_data["last_updated"] = datetime.utcnow().isoformat()
 
         global_ref.set(global_data)
@@ -280,12 +292,25 @@ def _update_leaderboard_mock(user_uid: str, game_slug: str, game_result: Dict) -
             global_lb[user_uid] = {
                 "total_score_all_games": 0,
                 "total_games_all_types": 0,
-                "games_breakdown": {}
+                "games_breakdown": {},
+                "best_scores_per_game": {}
             }
 
         global_lb[user_uid]["total_score_all_games"] += results.get("score", 0)
         global_lb[user_uid]["total_games_all_types"] += 1
         global_lb[user_uid]["games_breakdown"][game_slug] = global_lb[user_uid]["games_breakdown"].get(game_slug, 0) + 1
+
+        # Track best score per game for fair leaderboard sorting
+        if "best_scores_per_game" not in global_lb[user_uid]:
+            global_lb[user_uid]["best_scores_per_game"] = {}
+
+        current_game_score = results.get("score", 0)
+        previous_best = global_lb[user_uid]["best_scores_per_game"].get(game_slug, 0)
+        global_lb[user_uid]["best_scores_per_game"][game_slug] = max(previous_best, current_game_score)
+
+        # Calculate sum of best scores for leaderboard ranking
+        global_lb[user_uid]["best_scores_sum"] = sum(global_lb[user_uid]["best_scores_per_game"].values())
+
         global_lb[user_uid]["email"] = user_data.get("email", "")
         global_lb[user_uid]["display_name"] = user_data.get("display_name", "Unknown")
 
@@ -345,7 +370,12 @@ def get_leaderboard(game_slug: Optional[str] = None, filters: Optional[Dict] = N
             ]
 
         # Sort by score
-        sort_key = "total_score_all_games" if not game_slug else "total_score"
+        # For global leaderboard, sort by sum of best scores per game (fairer)
+        # For game-specific leaderboard, sort by total score in that game
+        if not game_slug:
+            sort_key = "best_scores_sum"
+        else:
+            sort_key = "total_score"
         leaderboard.sort(key=lambda x: x.get(sort_key, 0), reverse=True)
 
         # Add rank
@@ -390,7 +420,12 @@ def _get_leaderboard_mock(game_slug: Optional[str], filters: Optional[Dict], lim
             ]
 
         # Sort by score
-        sort_key = "total_score_all_games" if not game_slug else "total_score"
+        # For global leaderboard, sort by sum of best scores per game (fairer)
+        # For game-specific leaderboard, sort by total score in that game
+        if not game_slug:
+            sort_key = "best_scores_sum"
+        else:
+            sort_key = "total_score"
         leaderboard.sort(key=lambda x: x.get(sort_key, 0), reverse=True)
 
         # Add rank

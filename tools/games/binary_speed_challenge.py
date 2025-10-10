@@ -128,7 +128,8 @@ def init_game_state():
             'history': [],
             'last_result': None,  # Store last answer result for display
             'asked_numbers': set(),  # Track numbers already asked
-            'result_saved': False  # Track if result has been saved to DB
+            'result_saved': False,  # Track if result has been saved to DB
+            'stats_recorded': False  # Track if stats have been recorded
         }
 
 def reset_game():
@@ -150,7 +151,8 @@ def reset_game():
         'history': [],
         'last_result': None,
         'asked_numbers': set(),
-        'result_saved': False  # Track if result has been saved to DB
+        'result_saved': False,  # Track if result has been saved to DB
+        'stats_recorded': False  # Track if stats have been recorded
     }
 
 def is_game_active() -> bool:
@@ -497,7 +499,10 @@ def _save_game_result_to_db(game: dict, accuracy: float, avg_time: float):
         is_authenticated = user and user.get('is_authenticated')
 
         # Record global stats (for all games, authenticated or not)
-        record_game_played(GAME_SLUG, authenticated=is_authenticated)
+        # Check if stats already recorded to prevent duplicates on reruns
+        if 'stats_recorded' not in game or not game['stats_recorded']:
+            record_game_played(GAME_SLUG, authenticated=is_authenticated)
+            game['stats_recorded'] = True
 
         if is_authenticated:
             # Check if already saved (prevent duplicate saves)

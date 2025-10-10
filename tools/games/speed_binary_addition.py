@@ -128,6 +128,7 @@ def init_game_state():
             'history': [],
             'last_result': None,
             'result_saved': False,
+            'stats_recorded': False,  # Track if stats have been recorded
             'last_decimal_question': -10  # Track when last decimal question was shown
         }
 
@@ -149,6 +150,7 @@ def reset_game():
         'history': [],
         'last_result': None,
         'result_saved': False,
+        'stats_recorded': False,  # Track if stats have been recorded
         'last_decimal_question': -10
     }
 
@@ -474,8 +476,10 @@ def _save_game_result_to_db(game: dict, accuracy: float, avg_time: float):
         user = get_current_user()
         is_authenticated = user and user.get('is_authenticated')
 
-        # Record global stats
-        record_game_played(GAME_SLUG, authenticated=is_authenticated)
+        # Record global stats (check if already recorded to prevent duplicates on reruns)
+        if 'stats_recorded' not in game or not game['stats_recorded']:
+            record_game_played(GAME_SLUG, authenticated=is_authenticated)
+            game['stats_recorded'] = True
 
         if is_authenticated:
             # Check if already saved

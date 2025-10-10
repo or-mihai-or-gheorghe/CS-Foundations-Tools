@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 # Game registry for leaderboard
 AVAILABLE_GAMES = {
     "binary_speed_challenge": "Binary Speed Challenge",
-    # Add more games here as they are developed
+    "speed_binary_addition": "Speed Binary Addition",
+    "speed_hex_conversion": "Speed Hex Conversion"
 }
 
 
@@ -274,6 +275,7 @@ def _render_leaderboard_entry(entry: Dict, is_current_user: bool, current_email:
         """
     else:
         # Global stats
+        best_scores_sum = entry.get('best_scores_sum', 0)
         total_score = entry.get('total_score_all_games', 0)
         games_played = entry.get('total_games_all_types', 0)
         games_breakdown = entry.get('games_breakdown', {})
@@ -309,6 +311,14 @@ def _render_leaderboard_entry(entry: Dict, is_current_user: bool, current_email:
             <div style="display: flex; gap: 32px; align-items: center;">
                 <div style="text-align: center;">
                     <div style="font-weight: bold; font-size: 18px; color: #667eea;">
+                        {best_scores_sum:,}
+                    </div>
+                    <div style="font-size: 11px; color: #666;">
+                        Best Scores Sum
+                    </div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-weight: bold; font-size: 16px;">
                         {total_score:,}
                     </div>
                     <div style="font-size: 11px; color: #666;">
