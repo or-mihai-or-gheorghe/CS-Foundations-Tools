@@ -37,7 +37,7 @@ This application provides hands-on, interactive tools for learning low-level com
   - Visual Gray-code ordered K-maps with torus wrapping
   - Prime implicant selection and SOP minimization
 
-### Games Hub (2 games)
+### Games Hub (3 games)
 Interactive timed games to practice and master binary operations with competitive leaderboards.
 
 - **Binary Speed Challenge** - Convert binary and decimal numbers at lightning speed
@@ -49,6 +49,12 @@ Interactive timed games to practice and master binary operations with competitiv
   - Mix of binary+binary and binary+decimal problems
   - Three difficulty levels (Easy, Advanced, Expert)
   - Carry propagation visualization in results
+  - Direct input or multiple choice modes
+
+- **Speed Hex Conversion** - Convert between binary and hexadecimal formats
+  - Binary→Hex, Hex→Binary, and Mixed conversion modes
+  - Three difficulty levels (Easy, Advanced, Expert)
+  - Case-insensitive input for user convenience
   - Direct input or multiple choice modes
 
 **Leaderboard & Statistics:**
@@ -118,6 +124,7 @@ CS-Foundations-Tools/
 │   └── games/              # Game modules
 │       ├── binary_speed_challenge.py
 │       ├── speed_binary_addition.py
+│       ├── speed_hex_conversion.py
 │       └── game_utils.py
 ├── firebase/               # Firebase integration
 │   ├── auth.py             # Authentication (Google OAuth + mock)

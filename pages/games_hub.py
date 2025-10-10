@@ -1,7 +1,7 @@
 # pages/1_🎮_Games_Hub.py
 
 import streamlit as st
-from tools.games import binary_speed_challenge, speed_binary_addition
+from tools.games import binary_speed_challenge, speed_binary_addition, speed_hex_conversion
 from components.streamlit_auth import render_auth_ui, render_auth_status_badge
 from components.leaderboard import render_leaderboard
 from components.game_stats import render_game_stats, render_per_game_stats
@@ -24,6 +24,14 @@ AVAILABLE_GAMES = {
         "difficulty": "Easy to Expert",
         "duration": "60 seconds",
         "skills": ["Binary Addition", "Carry Logic", "Speed"]
+    },
+    "Speed Hex Conversion": {
+        "module": speed_hex_conversion,
+        "description": "Convert between binary and hexadecimal at lightning speed! Master both directions with instant feedback.",
+        "emoji": "🔢",
+        "difficulty": "Easy to Expert",
+        "duration": "60 seconds",
+        "skills": ["Hex Conversion", "Binary", "Speed"]
     }
 }
 
@@ -136,6 +144,8 @@ def render_game_screen(game_name: str):
                 st.session_state.binary_game['active'] = False
             if 'addition_game' in st.session_state:
                 st.session_state.addition_game['active'] = False
+            if 'hex_game' in st.session_state:
+                st.session_state.hex_game['active'] = False
             return_to_landing()
             st.rerun()
 
