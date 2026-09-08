@@ -26,6 +26,21 @@ class Circuit:
     term_outputs: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class SignalOutput:
+    name: str
+    source: str
+
+
+@dataclass(frozen=True)
+class LogicNetwork:
+    """A gate network with named outputs, including internal carry connections."""
+
+    var_order: tuple[str, ...]
+    nodes: tuple[Node, ...]
+    outputs: tuple[SignalOutput, ...]
+
+
 def build_circuit(cubes: Iterable[Cube], var_order: Iterable[str]) -> Circuit:
     """Compile ordered cubes without parsing SOP text or changing their order.
 
@@ -102,14 +117,39 @@ def build_circuit(cubes: Iterable[Cube], var_order: Iterable[str]) -> Circuit:
 
 def evaluate_circuit(circuit: Circuit, assignment: Mapping[str, int | bool]) -> dict[str, int]:
     """Return each signal's 0/1 value for one assignment of the full domain."""
-    if set(assignment) != set(circuit.var_order):
+    values = _evaluate_nodes(circuit.nodes, circuit.var_order, assignment)
+    if circuit.output not in values:
+        raise ValueError("Circuit output is not a defined signal.")
+    return values
+
+
+def evaluate_network(network: LogicNetwork, assignment: Mapping[str, int | bool]) -> dict[str, int]:
+    """Evaluate the actual gates once and validate every named output."""
+    if (not network.var_order or len(set(network.var_order)) != len(network.var_order)
+            or any(not isinstance(name, str) or not name for name in network.var_order)):
+        raise ValueError("Network inputs must have distinct, nonempty names.")
+    inputs = tuple(node.variable for node in network.nodes if node.kind == "INPUT")
+    if len(inputs) != len(network.var_order) or set(inputs) != set(network.var_order):
+        raise ValueError("Define exactly one input node for each network variable.")
+    names = tuple(output.name for output in network.outputs)
+    if not names or len(set(names)) != len(names) or any(not name for name in names):
+        raise ValueError("Network outputs must have distinct, nonempty names.")
+    values = _evaluate_nodes(network.nodes, network.var_order, assignment)
+    if any(output.source not in values for output in network.outputs):
+        raise ValueError("Every network output must reference a defined signal.")
+    return values
+
+
+def _evaluate_nodes(nodes: tuple[Node, ...], var_order: tuple[str, ...],
+                    assignment: Mapping[str, int | bool]) -> dict[str, int]:
+    if set(assignment) != set(var_order):
         raise ValueError("Provide exactly one 0/1 value for every circuit variable.")
     if any(type(value) not in (int, bool) or value not in (0, 1) for value in assignment.values()):
         raise ValueError("Circuit inputs must be 0 or 1.")
 
     arities = {"INPUT": 0, "CONST": 0, "NOT": 1, "AND": 2, "OR": 2}
     values: dict[str, int] = {}
-    for node in circuit.nodes:
+    for node in nodes:
         if node.id in values:
             raise ValueError(f"Duplicate circuit signal: {node.id}.")
         if node.kind not in arities or len(node.inputs) != arities[node.kind]:
@@ -132,12 +172,10 @@ def evaluate_circuit(circuit: Circuit, assignment: Mapping[str, int | bool]) -> 
             value = values[node.inputs[0]] | values[node.inputs[1]]
         values[node.id] = value
 
-    if circuit.output not in values:
-        raise ValueError("Circuit output is not a defined signal.")
     return values
 
 
-def gate_counts(circuit: Circuit) -> dict[str, int]:
+def gate_counts(circuit: Circuit | LogicNetwork) -> dict[str, int]:
     """Count real logic gates, excluding input/constant sources and wires."""
     counts = {kind: sum(node.kind == kind for node in circuit.nodes) for kind in ("AND", "OR", "NOT")}
     counts["total"] = sum(counts.values())

@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 import schemdraw
 from schemdraw import elements as elm, logic
 
-from .logic_circuit import Circuit
+from .logic_circuit import Circuit, Node
 
 
 Point = tuple[float, float]
@@ -56,6 +56,32 @@ class CircuitLayout:
     junctions: tuple[tuple[str, Point], ...]
     terms: tuple[TermLabel, ...]
     output: Point
+
+
+@dataclass(frozen=True)
+class SceneLabel:
+    text: str
+    position: Point
+    source: str | None = None
+    align: str = "center"
+
+
+@dataclass(frozen=True)
+class SceneGroup:
+    box: Box
+
+
+@dataclass(frozen=True)
+class CircuitScene:
+    """Positioned signals and labels, independent of the number of outputs."""
+
+    signals: tuple[Node, ...]
+    nodes: tuple[NodeLayout, ...]
+    wires: tuple[Wire, ...]
+    junctions: tuple[tuple[str, Point], ...]
+    labels: tuple[SceneLabel, ...]
+    margin: float = 0.8
+    groups: tuple[SceneGroup, ...] = ()
 
 
 def _gate(node_id: str, kind: str, x: float, y: float) -> NodeLayout:
@@ -201,7 +227,7 @@ def build_layout(circuit: Circuit) -> CircuitLayout:
                          tuple(junctions), terms, output)
 
 
-def _wire_segments(layout: CircuitLayout) -> tuple[tuple[str, Point, Point], ...]:
+def _wire_segments(layout: CircuitLayout | CircuitScene) -> tuple[tuple[str, Point, Point], ...]:
     """Merge overlapping collinear segments only when they carry one signal."""
     grouped: dict[tuple[str, str, float], list[tuple[float, float]]] = defaultdict(list)
     for wire in layout.wires:
@@ -228,35 +254,42 @@ def _wire_segments(layout: CircuitLayout) -> tuple[tuple[str, Point, Point], ...
     return tuple(segments)
 
 
-def render_circuit_svg(circuit: Circuit, layout: CircuitLayout, values: Mapping[str, int]) -> bytes:
-    """Draw a fresh SVG for a complete evaluated state, without global styles."""
-    if layout.circuit != circuit:
-        raise ValueError("Circuit layout belongs to a different netlist.")
-    if set(values) != {node.id for node in circuit.nodes} or any(
+def _validate_values(nodes: tuple[Node, ...], values: Mapping[str, int]) -> None:
+    if set(values) != {node.id for node in nodes} or any(
         type(value) not in (int, bool) or value not in (0, 1) for value in values.values()
     ):
         raise ValueError("Provide a 0/1 value for every circuit signal.")
+
+
+def render_scene_svg(scene: CircuitScene, values: Mapping[str, int], *,
+                     title: str, description: str) -> bytes:
+    """Use the same symbols, anchors and signal palette for every circuit scene."""
+    _validate_values(scene.signals, values)
+    positions = {node.id: node for node in scene.nodes}
+    if len(positions) != len(scene.nodes) or set(positions) != set(values):
+        raise ValueError("Provide exactly one position for every circuit signal.")
     # SVG text bounds are approximate; leave room for the left-aligned F label
     # and the labels over the first input rail in standalone image viewers.
     drawing = schemdraw.Drawing(canvas="svg", show=False, bgcolor="white", color=GATE_COLOR,
-                                inches_per_unit=0.4, fontsize=11, lw=1.5, margin=0.8)
-    positions = {node.id: node for node in layout.nodes}
+                                inches_per_unit=0.4, fontsize=11, lw=1.5, margin=scene.margin)
 
     def label(text: str, point: Point, *, align: str = "center") -> None:
         drawing.add(elm.Label().right().at(point).label(text, loc="center", ofst=0,
                                               halign=align, fontsize=11, color=GATE_COLOR))
 
-    for source, start, end in _wire_segments(layout):
+    for group in scene.groups:
+        left, bottom, right, top = group.box
+        drawing.add(elm.Rect((left, bottom), (right, top), lw=0.8, ls="--")
+                    .right().at((0, 0)).color("#cbd5e1"))
+    for source, start, end in _wire_segments(scene):
         drawing.add(elm.Line().at(start).to(end).color(SIGNAL_COLORS[values[source]]))
-    for source, point in layout.junctions:
+    for source, point in scene.junctions:
         drawing.add(elm.Dot(radius=0.055).at(point).color(SIGNAL_COLORS[values[source]]))
-    for node in circuit.nodes:
+    for node in scene.signals:
         position = positions[node.id]
         x, y = position.output
         if node.kind in ("INPUT", "CONST"):
             drawing.add(elm.Dot(open=True, radius=0.07).at(position.output).color(GATE_COLOR))
-            text = f"{node.variable}={values[node.id]}" if node.kind == "INPUT" else str(node.constant)
-            label(text, (x, y + 0.5))
             continue
         if node.kind == "AND":
             gate = logic.And(inputs=2)
@@ -273,22 +306,51 @@ def render_circuit_svg(circuit: Circuit, layout: CircuitLayout, values: Mapping[
                    for actual, target in zip(gate.absanchors[anchor], expected)):
                 raise ValueError("Logic gate geometry no longer matches the circuit layout.")
         label(str(values[node.id]), (x - 0.35, y + 0.75))
-    for term in layout.terms:
-        x, y = term.position
-        label(f"T{term.number}={values[term.source]}", (x, y + 0.4))
-    label(f"F={values[circuit.output]}", (layout.output[0] + 0.2, layout.output[1]), align="left")
+    for item in scene.labels:
+        text = item.text if item.source is None else f"{item.text}={values[item.source]}"
+        label(text, item.position, align=item.align)
 
     svg = drawing.get_imagedata("svg")
     root = ET.fromstring(svg)
     x, y, width, height = root.attrib["viewBox"].split()
-    summary = ", ".join(f"{node.variable}={values[node.id]}" for node in circuit.nodes if node.kind == "INPUT")
-    description = f"AND2/OR2 circuit with unary NOT. {summary}. F={values[circuit.output]}. Dots connect wires; other crossings do not."
     # A real background rectangle remains white in standalone SVG viewers too.
-    additions = (f'<title>Logic circuit: F={values[circuit.output]}</title>'
+    additions = (f'<title>{escape(title)}</title>'
                  f'<desc>{escape(description)}</desc>'
                  f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="white"/>').encode()
     end = svg.index(b">", svg.index(b"<svg")) + 1
     return svg[:end] + additions + svg[end:]
+
+
+def render_circuit_svg(circuit: Circuit, layout: CircuitLayout, values: Mapping[str, int], *,
+                       input_labels: Mapping[str, str] | None = None,
+                       output_label: str = "F") -> bytes:
+    """Draw one SOP circuit; optional aliases change labels, never its logic."""
+    if layout.circuit != circuit:
+        raise ValueError("Circuit layout belongs to a different netlist.")
+    _validate_values(circuit.nodes, values)
+    aliases = input_labels or {}
+    positions = {node.id: node for node in layout.nodes}
+    labels = []
+    input_index = 0
+    for node in circuit.nodes:
+        if node.kind in ("INPUT", "CONST"):
+            x, y = positions[node.id].output
+            text = aliases.get(node.variable, node.variable) if node.kind == "INPUT" else str(node.constant)
+            offset = 1.1 if input_labels and input_index % 2 else 0.5
+            labels.append(SceneLabel(text, (x, y + offset), node.id if node.kind == "INPUT" else None))
+            if node.kind == "INPUT":
+                input_index += 1
+    labels.extend(SceneLabel(f"T{term.number}", (term.position[0], term.position[1] + 0.4), term.source)
+                  for term in layout.terms)
+    labels.append(SceneLabel(output_label, (layout.output[0] + 0.2, layout.output[1]), circuit.output, "left"))
+    scene = CircuitScene(circuit.nodes, layout.nodes, layout.wires, layout.junctions, tuple(labels),
+                         1.2 if input_labels or output_label != "F" else 0.8)
+    summary = ", ".join(f"{aliases.get(node.variable, node.variable)}={values[node.id]}"
+                        for node in circuit.nodes if node.kind == "INPUT")
+    output = f"{output_label}={values[circuit.output]}"
+    return render_scene_svg(scene, values, title=f"Logic circuit: {output}",
+                            description=f"AND2/OR2 circuit with unary NOT. {summary}. {output}. "
+                                        "Dots connect wires; other crossings do not.")
 
 
 def svg_size_px(svg: bytes) -> tuple[float, float]:

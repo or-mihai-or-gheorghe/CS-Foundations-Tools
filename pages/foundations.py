@@ -4,7 +4,7 @@ import streamlit as st
 from tools import decimal_to_binary, binary_to_decimal, multi_format_converter, raw_binary_arithmetic, twos_complement_arithmetic, bcd_arithmetic
 from tools import floating_point, decimal_converter, special_values, fp_arithmetic
 from tools import hamming_encode, hamming_decode, crc_encode, crc_decode
-from tools import logic_kmap_sop, gray_code_converter
+from tools import logic_kmap_sop, logic_adder_lesson, gray_code_converter
 
 # --- Data Structure for Tool Groups ---
 TOOL_GROUPS = {
@@ -31,7 +31,8 @@ TOOL_GROUPS = {
         "CRC Decode": crc_decode,
     },
     "Logic Operations": {
-        "K-Map Minimizer (BETA)": logic_kmap_sop
+        "K-Map Minimizer (BETA)": logic_kmap_sop,
+        "4-bit Adder (AND/OR/NOT)": logic_adder_lesson,
     }
 }
 

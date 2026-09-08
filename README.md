@@ -31,7 +31,7 @@ This application provides hands-on, interactive tools for learning low-level com
 - **CRC Encode** - Cyclic redundancy check encoding with polynomial division
 - **CRC Decode** - CRC error detection
 
-### Logic Operations (1 tool)
+### Logic Operations (2 tools)
 - **K-Map Minimizer (BETA)** - Karnaugh map-based Boolean expression minimization (up to 5 variables)
   - Supports multiple expression syntaxes
   - Visual Gray-code ordered K-maps with torus wrapping
@@ -39,6 +39,11 @@ This application provides hands-on, interactive tools for learning low-level com
   - Two-input AND/OR gates, shared NOT gates, and interactive 0/1 simulation
   - Circuit zoom and standalone SVG export
   - Full circuit displayed on the page, with red (0) and green (1) signal wires
+- **4-bit Adder (AND/OR/NOT)** - Build a ripple-carry adder from two one-bit Boolean functions
+  - Separate truth tables, K-maps, and gate circuits for sum and carry
+  - Shared input switches and a combined one-bit full adder
+  - Four connected full adders, binary operand inputs, and a carry trace
+  - All 76 AND/OR/NOT gates visible, red/green signal simulation, and SVG export
 
 ### Games Hub (3 games)
 Interactive timed games to practice and master binary operations with competitive leaderboards.

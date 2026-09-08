@@ -214,12 +214,21 @@ PALETTE = [
     "238,130,238","210,105,30","106,90,205","46,139,87","139,69,19",
 ]
 
-def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
+def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...], *,
+                     input_labels=None, compact_headers=False, active_minterm=None):
+    """Render groups, with optional lesson labels and a selected input cell.
+
+    Compact headers name each axis once and show only Gray bits beside cells.
+    The selection is independent of the cell's Boolean value and group cover.
+    """
     R, C = model["R"], model["C"]
     rb, cb = model["rb"], model["cb"]
     rows_gray, cols_gray = model["rows_gray"], model["cols_gray"]
     var_order = model["var_order"]
     cell_to_min = model["cell_to_min"]
+    labels = {name: escape(str((input_labels or {}).get(name, name))) for name in var_order}
+    if active_minterm is not None and active_minterm not in model["min_to_cell"]:
+        raise ValueError("Selected minterm must belong to the K-map.")
 
     CELL = 44
     GAP  = 4
@@ -254,33 +263,50 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
                 f"<span class='group-label'>G{gi+1}</span></div>"
             )
 
+    if active_minterm is not None:
+        r, c = model["min_to_cell"][active_minterm]
+        layers.append(
+            f"<div class='active-cell' data-active-minterm='{active_minterm}' "
+            f"role='img' aria-label='Selected input: minterm {active_minterm}, "
+            f"output {escape(str(values.get(active_minterm, '0')))}' "
+            f"style='left:{c*(CELL+GAP)+5}px;top:{r*(CELL+GAP)+14}px;"
+            f"width:{CELL-10}px;height:{CELL-19}px;'></div>"
+        )
+
     # --- put headers OUTSIDE the grid (reserve space around it) ---
     PAD_L = 72 if rb > 0 else 0   # left gutter for row labels
-    PAD_T = 48 if cb > 0 else 0   # top gutter for column labels
+    PAD_T = (68 if compact_headers else 48) if cb > 0 else 0
 
     row_hdrs = []
     if rb > 0:
-        row_vars_label = "".join(var_order[:rb])
+        row_vars_label = ",".join(labels[name] for name in var_order[:rb]) if compact_headers else "".join(labels[name] for name in var_order[:rb])
+        if compact_headers:
+            row_hdrs.append(f"<div class='rowhdr' style='left:8px;top:{PAD_T-29}px;'>"
+                            f"{row_vars_label}</div>")
         for r, rcode in enumerate(rows_gray):
             bits = format(rcode, f"0{rb}b")
             cy = PAD_T + r*CELL + r*GAP + CELL/2
             row_hdrs.append(
                 f"<div class='rowhdr' style='top:{cy}px;left:8px;transform:translateY(-50%);'>"
-                f"{row_vars_label} - {bits}</div>"
+                f"{bits if compact_headers else row_vars_label + ' - ' + bits}</div>"
             )
 
     col_hdrs = []
     if cb > 0:
-        col_vars_label = "".join(var_order[rb:rb+cb])
+        col_vars_label = ",".join(labels[name] for name in var_order[rb:rb+cb]) if compact_headers else "".join(labels[name] for name in var_order[rb:rb+cb])
+        if compact_headers:
+            col_hdrs.append(f"<div class='colhdr' style='left:{PAD_L+W/2}px;top:3px;"
+                            f"transform:translateX(-50%);'>({col_vars_label})</div>")
         for c, ccode in enumerate(cols_gray):
             bits = format(ccode, f"0{cb}b")
             cx = PAD_L + c*CELL + c*GAP + CELL/2
             col_hdrs.append(
-                f"<div class='colhdr' style='left:{cx}px;top:8px;transform:translateX(-50%);'>"
-                f"{col_vars_label}<br>{bits}</div>"
+                f"<div class='colhdr' style='left:{cx}px;top:{35 if compact_headers else 8}px;transform:translateX(-50%);'>"
+                f"{bits if compact_headers else col_vars_label + '<br>' + bits}</div>"
             )
 
     html = f"""
+    <div class="logic-kmap-display">
     <div class="wrap" style="padding-left:{PAD_L}px;padding-top:{PAD_T}px;">
       <div class="kmap" style="width:{W}px;height:{H}px;">
         {''.join(cells_html)}
@@ -290,8 +316,8 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
       {''.join(col_hdrs)}
     </div>
     <style>
-      .wrap {{ position:relative; margin: 6px 0 18px 0; }}
-      .kmap {{
+      .logic-kmap-display .wrap {{ position:relative; margin: 6px 0 18px 0; }}
+      .logic-kmap-display .kmap {{
          position: relative;
          display: grid;
          grid-template-rows: repeat({R}, 1fr);
@@ -302,9 +328,10 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
          border-radius: 10px;
          box-shadow: 0 1px 4px rgba(0,0,0,0.06) inset;
       }}
-      .cell {{
+      .logic-kmap-display .cell {{
          position: relative;
          background: white;
+         color: #17212b;
          border: 1px solid #e3e3e3;
          border-radius: 8px;
          display:flex; align-items:center; justify-content:center;
@@ -312,15 +339,17 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
          font-size: 16px;
          font-weight: 600;
       }}
-      .cell .minidx {{ position:absolute; top:4px; left:6px; font-size: 11px; color:#667; font-weight:500; }}
-      .cell .val {{ transform: translateY(1px); }}
-      .cell.v1 {{ background: #fffefd; border-color:#f1d1d1; }}
-      .cell.v0 {{ color:#99a; font-weight:500; }}
-      .cell.vx {{ color:#aa6; }}
-      .group {{ position:absolute; pointer-events:none; border-radius: 10px; z-index:1; }}
-      .group-label {{ position:absolute; right:1px; top:1px; font:9px monospace;
+      .logic-kmap-display .cell .minidx {{ position:absolute; top:4px; left:6px; font-size: 11px; color:#667; font-weight:500; }}
+      .logic-kmap-display .cell .val {{ transform: translateY(1px); }}
+      .logic-kmap-display .cell.v1 {{ background: #fffefd; border-color:#f1d1d1; }}
+      .logic-kmap-display .cell.v0 {{ color:#99a; font-weight:500; }}
+      .logic-kmap-display .cell.vx {{ color:#aa6; }}
+      .logic-kmap-display .group {{ position:absolute; pointer-events:none; border-radius: 10px; z-index:1; }}
+      .logic-kmap-display .group-label {{ position:absolute; right:1px; top:1px; font:9px monospace;
                        color:#223; background:#ffffffdd; border-radius:3px; padding:0 1px; }}
-      .rowhdr, .colhdr {{
+      .logic-kmap-display .active-cell {{ position:absolute; z-index:2; pointer-events:none;
+                      border:2px dashed #17212b; border-radius:4px; box-sizing:border-box; }}
+      .logic-kmap-display .rowhdr, .logic-kmap-display .colhdr {{
          position:absolute; z-index:3;
          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
          font-size: 12px; color:#445;
@@ -329,6 +358,7 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
          padding: 2px 6px; pointer-events:none; white-space: pre; text-align:center;
       }}
     </style>
+    </div>
     """
     return html
 
