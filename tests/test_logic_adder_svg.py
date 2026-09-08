@@ -11,7 +11,7 @@ from tools.logic_adder import build_full_adder, build_four_bit_adder, evaluate_f
 from tools.logic_adder_svg import build_adder_scene, render_adder_svg
 from tools.logic_circuit import evaluate_network
 from tools.logic_circuit_svg import (
-    SIGNAL_COLORS, _wire_segments, build_layout, render_circuit_svg, svg_size_px,
+    CIRCUIT_FONT_SIZE, SIGNAL_COLORS, _wire_segments, build_layout, render_circuit_svg, svg_size_px,
 )
 
 
@@ -136,7 +136,7 @@ class AdderGeometryTests(unittest.TestCase):
         adder = build_four_bit_adder()
         scene = build_adder_scene(adder)
         positions = {node.id: node for node in scene.nodes}
-        em = 11 / (72 * 0.4)  # The shared renderer's font size and drawing scale.
+        em = CIRCUIT_FONT_SIZE / (72 * 0.4)  # Match the renderer's font and drawing scale.
         for stage in adder.stages[1:]:
             top = positions[stage.inputs[0]].output[1]
             label = next(item for item in scene.labels if item.source == stage.inputs[2]

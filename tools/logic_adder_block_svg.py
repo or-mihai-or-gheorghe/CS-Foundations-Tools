@@ -10,7 +10,10 @@ import schemdraw
 from schemdraw import elements as elm
 
 from .logic_adder import AdderDefinition
-from .logic_circuit_svg import GATE_COLOR, SIGNAL_COLORS, _validate_values
+from .logic_circuit_svg import (
+    CIRCUIT_FONT_SIZE, CIRCUIT_STROKE_WIDTH, GATE_COLOR, SIGNAL_COLORS,
+    SVG_STROKE_STYLE, _validate_values,
+)
 
 
 def render_adder_blocks_svg(adder: AdderDefinition, values: Mapping[str, int]) -> bytes:
@@ -23,7 +26,8 @@ def render_adder_blocks_svg(adder: AdderDefinition, values: Mapping[str, int]) -
         raise ValueError("The block overview requires four full-adder stages.")
     _validate_values(adder.network.nodes, values)
     drawing = schemdraw.Drawing(canvas="svg", show=False, bgcolor="white", color=GATE_COLOR,
-                                inches_per_unit=0.4, fontsize=11, lw=1.5, margin=1.2)
+                                inches_per_unit=0.4, fontsize=CIRCUIT_FONT_SIZE,
+                                lw=CIRCUIT_STROKE_WIDTH, margin=1.2)
 
     def label(text, point, *, align="center"):
         drawing.add(elm.Label().right().at(point).label(
@@ -39,7 +43,7 @@ def render_adder_blocks_svg(adder: AdderDefinition, values: Mapping[str, int]) -
         left, right = x - 2.2, x + 2.2
         drawing.add(elm.Rect((left, -1.6), (right, 1.6), fill="white")
                     .right().at((0, 0)))
-        label(f"FA{i}", (x, 0.75))
+        label(f"FA{i}", (x, 1.0))
         label("Full adder", (x, 0.25))
         label("Cout", (left + 0.2, -0.45), align="left")
         label("Cin", (right - 0.2, -0.45), align="right")
@@ -68,6 +72,7 @@ def render_adder_blocks_svg(adder: AdderDefinition, values: Mapping[str, int]) -
                    f"{outputs}. 0 is red; 1 is green.")
     additions = ("<title>Four-bit ripple-carry adder: block overview</title>"
                  f"<desc>{escape(description)}</desc>"
+                 f"{SVG_STROKE_STYLE}"
                  f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="white"/>').encode()
     end = svg.index(b">", svg.index(b"<svg")) + 1
     return svg[:end] + additions + svg[end:]

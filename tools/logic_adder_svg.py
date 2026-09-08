@@ -146,9 +146,11 @@ def build_adder_scene(adder: AdderDefinition) -> CircuitScene:
             first_term = layout.terms[0].position
             labels.append(SceneLabel("Sum" if branch == "sum" else "Carry",
                                      _translate(first_term, dx, dy + 2.0)))
+            # Keep the longer Cout labels clear of the OR routing elbow.
+            label_dx = dx - 0.35 if branch == "carry" else dx
             for term in layout.terms:
                 labels.append(SceneLabel(f"{prefix}:T{term.number}",
-                                         _translate(term.position, dx, dy + 0.4), mapping[term.source]))
+                                         _translate(term.position, label_dx, dy + 0.4), mapping[term.source]))
             output = _translate(layout.output, dx, dy)
             name = (f"S{stage.index}" if branch == "sum" else f"C{stage.index + 1}") if four_bits else prefix
             # Intermediate carry labels sit above the continuing wire. External

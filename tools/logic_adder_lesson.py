@@ -258,10 +258,10 @@ def render():
                      f"S={result.sum_bits}, C4={result.carry_out}.")
         with st.container(width=380, key="adder_carry_trace"):
             st.subheader("Follow the carry")
-            _table(("i", "Aᵢ", "Bᵢ", "Cᵢ", "Sᵢ", "Cᵢ₊₁"), result.stages,
-                   name="Four-bit carry propagation")
             st.caption("At every stage: Aᵢ + Bᵢ + Cᵢ = Sᵢ + 2·Cᵢ₊₁. "
                        "Try 1111 + 0001 to follow a carry through all four stages.")
+            _table(("i", "Aᵢ", "Bᵢ", "Cᵢ", "Sᵢ", "Cᵢ₊₁"), result.stages,
+                   name="Four-bit carry propagation")
     st.subheader("Complete AND/OR/NOT circuit")
     st.caption("The same four blocks are expanded below, with FA₀ at the top and FA₃ "
                "at the bottom. Carry now travels downward through the same connections.")

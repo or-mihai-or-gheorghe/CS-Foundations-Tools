@@ -20,6 +20,11 @@ Point = tuple[float, float]
 Box = tuple[float, float, float, float]
 SIGNAL_COLORS = {0: "#dc2626", 1: "#15803d"}
 GATE_COLOR = "#17212b"
+CIRCUIT_FONT_SIZE = 14
+CIRCUIT_STROKE_WIDTH = 2
+# Keep strokes legible at the lesson's 50% zoom and when images fit the page.
+SVG_STROKE_STYLE = ("<style>path,polyline,polygon,line,circle,ellipse,rect"
+                    f"{{stroke-width:{CIRCUIT_STROKE_WIDTH}px;vector-effect:non-scaling-stroke}}</style>")
 _GATE_WIDTH = {"AND": 1.85, "OR": 1.9, "XOR": 1.9, "NOT": 0.89}
 _COLUMN = 3.5
 _LEAF_GAP = 1.15
@@ -271,11 +276,12 @@ def render_scene_svg(scene: CircuitScene, values: Mapping[str, int], *,
     # SVG text bounds are approximate; leave room for the left-aligned F label
     # and the labels over the first input rail in standalone image viewers.
     drawing = schemdraw.Drawing(canvas="svg", show=False, bgcolor="white", color=GATE_COLOR,
-                                inches_per_unit=0.4, fontsize=11, lw=1.5, margin=scene.margin)
+                                inches_per_unit=0.4, fontsize=CIRCUIT_FONT_SIZE,
+                                lw=CIRCUIT_STROKE_WIDTH, margin=scene.margin)
 
     def label(text: str, point: Point, *, align: str = "center") -> None:
         drawing.add(elm.Label().right().at(point).label(text, loc="center", ofst=0,
-                                              halign=align, fontsize=11, color=GATE_COLOR))
+                                              halign=align, fontsize=CIRCUIT_FONT_SIZE, color=GATE_COLOR))
 
     for group in scene.groups:
         left, bottom, right, top = group.box
@@ -318,6 +324,7 @@ def render_scene_svg(scene: CircuitScene, values: Mapping[str, int], *,
     # A real background rectangle remains white in standalone SVG viewers too.
     additions = (f'<title>{escape(title)}</title>'
                  f'<desc>{escape(description)}</desc>'
+                 f'{SVG_STROKE_STYLE}'
                  f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="white"/>').encode()
     end = svg.index(b">", svg.index(b"<svg")) + 1
     return svg[:end] + additions + svg[end:]
@@ -338,7 +345,7 @@ def render_circuit_svg(circuit: Circuit, layout: CircuitLayout, values: Mapping[
         if node.kind in ("INPUT", "CONST"):
             x, y = positions[node.id].output
             text = aliases.get(node.variable, node.variable) if node.kind == "INPUT" else str(node.constant)
-            offset = 1.1 if input_labels and input_index % 2 else 0.5
+            offset = 1.1 if input_index % 2 else 0.5
             labels.append(SceneLabel(text, (x, y + offset), node.id if node.kind == "INPUT" else None))
             if node.kind == "INPUT":
                 input_index += 1
