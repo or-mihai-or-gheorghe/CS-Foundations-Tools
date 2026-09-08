@@ -73,7 +73,7 @@ def _diagram(name, signature, render_svg, description):
     st.html(
         f'<div role="region" aria-label="{escape(description, quote=True)}">'
         f'<img alt="{escape(description, quote=True)}" src="data:image/svg+xml;base64,{encoded}" '
-        f'style="display:block;width:{width:.2f}px;max-width:100%;height:auto;'
+        f'style="display:block;width:{width * 0.5:.2f}px;max-width:100%;height:auto;'
         f'aspect-ratio:{width:.6f}/{height:.6f};" /></div>'
     )
     st.download_button(f"Download {name.replace('_', ' ')} SVG", svg_bytes,
