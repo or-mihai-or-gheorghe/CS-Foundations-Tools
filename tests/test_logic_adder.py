@@ -6,7 +6,7 @@ import unittest
 
 from tools.logic_adder import (
     FULL_ADDER_TABLE, build_four_bit_adder, build_full_adder, evaluate_four_bit,
-    operand_assignment, parse_operand,
+    build_xor_four_bit_adder, build_xor_full_adder, operand_assignment, parse_operand,
 )
 from tools.logic_circuit import SignalOutput, evaluate_circuit, evaluate_network, gate_counts
 
@@ -107,6 +107,80 @@ class FullAdderTests(unittest.TestCase):
         for candidate in ({"A": 1, "B": 0}, {**assignment, "C0": 0}, {**assignment, "A": 2}):
             with self.subTest(assignment=candidate), self.assertRaises(ValueError):
                 evaluate_network(network, candidate)
+
+
+class XorAdderTests(unittest.TestCase):
+    def test_all_eight_full_adder_states_match_arithmetic_and_sop(self):
+        adder = build_xor_full_adder()
+        sop = build_full_adder()
+        for a, b, cin in product((0, 1), repeat=3):
+            with self.subTest(a=a, b=b, cin=cin):
+                assignment = {"A": a, "B": b, "Cin": cin}
+                values = evaluate_network(adder.network, assignment)
+                sop_values = evaluate_network(sop.network, assignment)
+                actual = tuple(values[output.source] for output in adder.network.outputs)
+                expected = tuple(sop_values[output.source] for output in sop.network.outputs)
+                self.assertEqual(actual, expected)
+                self.assertEqual(actual, ((a + b + cin) % 2, (a + b + cin) // 2))
+                self.assertEqual(values["fa0.xor_ab"], a ^ b)
+                self.assertEqual(values["fa0.and_ab"], a & b)
+                self.assertEqual(values["fa0.and_carry"], (a ^ b) & cin)
+
+    def test_all_256_pairs_and_each_carry_match_arithmetic_and_sop(self):
+        adder = build_xor_four_bit_adder()
+        sop = build_four_bit_adder()
+        for a, b in product(range(16), repeat=2):
+            with self.subTest(a=a, b=b):
+                operands = (f"{a:04b}", f"{b:04b}")
+                result = evaluate_four_bit(adder, *operands)
+                sop_result = evaluate_four_bit(sop, *operands)
+                self.assertEqual(result.full_bits, f"{a + b:05b}")
+                self.assertEqual(result.sum_bits, f"{(a + b) % 16:04b}")
+                self.assertEqual(result.carry_out, (a + b) // 16)
+                self.assertEqual(result.stages, sop_result.stages)
+                carry = 0
+                for i, actual in enumerate(result.stages):
+                    ai, bi = (a >> i) & 1, (b >> i) & 1
+                    total = ai + bi + carry
+                    self.assertEqual(actual, (i, ai, bi, carry, total % 2, total // 2))
+                    carry = total // 2
+
+    def test_five_gates_per_stage_and_actual_internal_carry_connections(self):
+        one = build_xor_full_adder()
+        four = build_xor_four_bit_adder()
+        self.assertIs(one, build_xor_full_adder())
+        self.assertIs(four, build_xor_four_bit_adder())
+        self.assertEqual(gate_counts(one.network), {"AND": 2, "OR": 1, "NOT": 0, "XOR": 2, "total": 5})
+        self.assertEqual(gate_counts(four.network), {"AND": 8, "OR": 4, "NOT": 0, "XOR": 8, "total": 20})
+        for adder, reference in ((one, build_full_adder()), (four, build_four_bit_adder())):
+            self.assertEqual(adder.network.var_order, reference.network.var_order)
+            self.assertEqual(tuple(output.name for output in adder.network.outputs),
+                             tuple(output.name for output in reference.network.outputs))
+            nodes = {node.id: node for node in adder.network.nodes}
+            self.assertEqual(len(nodes), len(adder.network.nodes))
+            seen = set()
+            for node in adder.network.nodes:
+                self.assertTrue(set(node.inputs) <= seen)
+                self.assertEqual(len(node.inputs), 0 if node.kind in ("INPUT", "CONST") else 2)
+                seen.add(node.id)
+            for stage in adder.stages:
+                a, b, cin = stage.inputs
+                prefix = f"fa{stage.index}."
+                self.assertEqual(nodes[prefix + "xor_ab"].inputs, (a, b))
+                self.assertEqual(nodes[stage.sum_output].inputs, (prefix + "xor_ab", cin))
+                self.assertEqual(nodes[prefix + "and_ab"].inputs, (a, b))
+                self.assertEqual(nodes[prefix + "and_carry"].inputs, (prefix + "xor_ab", cin))
+                self.assertEqual(nodes[stage.carry_output].inputs,
+                                 (prefix + "and_ab", prefix + "and_carry"))
+                self.assertEqual((stage.sum_nodes, stage.carry_nodes), ((), ()))
+        self.assertEqual(one.stages[0].inputs, ("input_A", "input_B", "input_Cin"))
+        nodes = {node.id: node for node in four.network.nodes}
+        self.assertEqual(nodes[four.stages[0].inputs[2]].kind, "CONST")
+        self.assertEqual(nodes[four.stages[0].inputs[2]].constant, 0)
+        for previous, stage in zip(four.stages, four.stages[1:]):
+            self.assertEqual(stage.inputs[2], previous.carry_output)
+        with self.assertRaises(ValueError):
+            evaluate_four_bit(one, "0000", "0000")
 
 
 if __name__ == "__main__":

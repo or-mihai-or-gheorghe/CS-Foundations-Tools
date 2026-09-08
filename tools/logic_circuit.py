@@ -147,7 +147,7 @@ def _evaluate_nodes(nodes: tuple[Node, ...], var_order: tuple[str, ...],
     if any(type(value) not in (int, bool) or value not in (0, 1) for value in assignment.values()):
         raise ValueError("Circuit inputs must be 0 or 1.")
 
-    arities = {"INPUT": 0, "CONST": 0, "NOT": 1, "AND": 2, "OR": 2}
+    arities = {"INPUT": 0, "CONST": 0, "NOT": 1, "AND": 2, "OR": 2, "XOR": 2}
     values: dict[str, int] = {}
     for node in nodes:
         if node.id in values:
@@ -168,6 +168,8 @@ def _evaluate_nodes(nodes: tuple[Node, ...], var_order: tuple[str, ...],
             value = 1 - values[node.inputs[0]]
         elif node.kind == "AND":
             value = values[node.inputs[0]] & values[node.inputs[1]]
+        elif node.kind == "XOR":
+            value = values[node.inputs[0]] ^ values[node.inputs[1]]
         else:
             value = values[node.inputs[0]] | values[node.inputs[1]]
         values[node.id] = value
@@ -178,5 +180,8 @@ def _evaluate_nodes(nodes: tuple[Node, ...], var_order: tuple[str, ...],
 def gate_counts(circuit: Circuit | LogicNetwork) -> dict[str, int]:
     """Count real logic gates, excluding input/constant sources and wires."""
     counts = {kind: sum(node.kind == kind for node in circuit.nodes) for kind in ("AND", "OR", "NOT")}
+    xor_count = sum(node.kind == "XOR" for node in circuit.nodes)
+    if xor_count:
+        counts["XOR"] = xor_count
     counts["total"] = sum(counts.values())
     return counts

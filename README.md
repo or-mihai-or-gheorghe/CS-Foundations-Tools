@@ -44,6 +44,8 @@ This application provides hands-on, interactive tools for learning low-level com
   - Shared input switches and a combined one-bit full adder
   - Four connected full adders, binary operand inputs, and a carry trace
   - All 76 AND/OR/NOT gates visible, red/green signal simulation, and SVG export
+  - Block overview showing carry propagation from bit 0 to bit 3
+  - Equivalent 20-gate XOR/AND/OR circuit, synchronized with the same operands
 
 ### Games Hub (3 games)
 Interactive timed games to practice and master binary operations with competitive leaderboards.

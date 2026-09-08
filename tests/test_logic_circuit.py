@@ -152,8 +152,9 @@ class LogicCircuitTests(unittest.TestCase):
     def test_evaluator_rejects_invalid_gate_shape_or_topology(self):
         input_a = Node("input_A", "INPUT", variable="A")
         for node in (Node("bad", "AND", ("input_A",)),
+                     Node("bad", "XOR", ("input_A",)),
                      Node("bad", "NOT", ("later",)),
-                     Node("bad", "XOR", ("input_A", "input_A"))):
+                     Node("bad", "NAND", ("input_A", "input_A"))):
             circuit = Circuit(("A",), (input_a, node), "bad", ("bad",))
             with self.subTest(node=node), self.assertRaises(ValueError):
                 evaluate_circuit(circuit, {"A": 0})

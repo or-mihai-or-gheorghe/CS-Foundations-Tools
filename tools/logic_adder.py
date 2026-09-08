@@ -1,4 +1,4 @@
-"""Fixed full-adder lesson circuits, composed from their two minimized SOPs."""
+"""Fixed full-adder lesson circuits using minimized SOPs or shared XOR gates."""
 
 from __future__ import annotations
 
@@ -41,6 +41,12 @@ class AdderDefinition:
 
 
 @dataclass(frozen=True)
+class XorAdderDefinition:
+    network: LogicNetwork
+    stages: tuple[AdderStage, ...]
+
+
+@dataclass(frozen=True)
 class AdderEvaluation:
     values: Mapping[str, int]
     sum_bits: str
@@ -57,6 +63,44 @@ def build_full_adder() -> AdderDefinition:
 @lru_cache(maxsize=1)
 def build_four_bit_adder() -> AdderDefinition:
     return _build_adder(four_bits=True)
+
+
+@lru_cache(maxsize=1)
+def build_xor_full_adder() -> XorAdderDefinition:
+    return _build_xor_adder(four_bits=False)
+
+
+@lru_cache(maxsize=1)
+def build_xor_four_bit_adder() -> XorAdderDefinition:
+    return _build_xor_adder(four_bits=True)
+
+
+def _build_xor_adder(*, four_bits: bool) -> XorAdderDefinition:
+    var_order = (tuple(f"{operand}{i}" for operand in "AB" for i in reversed(range(4)))
+                 if four_bits else ("A", "B", "Cin"))
+    nodes = [Node(f"input_{name}", "INPUT", variable=name) for name in var_order]
+    carry = "const_C0" if four_bits else "input_Cin"
+    if four_bits:
+        nodes.append(Node(carry, "CONST", constant=0))
+    stages = []
+    for i in range(4 if four_bits else 1):
+        a, b = (f"input_A{i}", f"input_B{i}") if four_bits else ("input_A", "input_B")
+        prefix = f"fa{i}."
+        xor_ab, xor_sum = prefix + "xor_ab", prefix + "xor_sum"
+        and_ab, and_carry, or_carry = (prefix + name for name in ("and_ab", "and_carry", "or_carry"))
+        nodes.extend((
+            Node(xor_ab, "XOR", (a, b)),
+            Node(xor_sum, "XOR", (xor_ab, carry)),
+            Node(and_ab, "AND", (a, b)),
+            Node(and_carry, "AND", (xor_ab, carry)),
+            Node(or_carry, "OR", (and_ab, and_carry)),
+        ))
+        stages.append(AdderStage(i, (a, b, carry), xor_sum, or_carry, (), ()))
+        carry = or_carry
+    outputs = (tuple(SignalOutput(f"S{stage.index}", stage.sum_output) for stage in reversed(stages))
+               + (SignalOutput("C4", carry),) if four_bits else
+               (SignalOutput("S", stages[0].sum_output), SignalOutput("Cout", carry)))
+    return XorAdderDefinition(LogicNetwork(var_order, tuple(nodes), outputs), tuple(stages))
 
 
 def _build_adder(*, four_bits: bool) -> AdderDefinition:
@@ -115,7 +159,7 @@ def operand_assignment(a: str, b: str) -> dict[str, int]:
             for i, bit in enumerate(reversed(text))}
 
 
-def evaluate_four_bit(adder: AdderDefinition, a: str, b: str) -> AdderEvaluation:
+def evaluate_four_bit(adder: AdderDefinition | XorAdderDefinition, a: str, b: str) -> AdderEvaluation:
     if len(adder.stages) != 4:
         raise ValueError("Use the four-bit adder for two four-bit operands.")
     values = evaluate_network(adder.network, operand_assignment(a, b))

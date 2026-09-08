@@ -20,7 +20,7 @@ Point = tuple[float, float]
 Box = tuple[float, float, float, float]
 SIGNAL_COLORS = {0: "#dc2626", 1: "#15803d"}
 GATE_COLOR = "#17212b"
-_GATE_WIDTH = {"AND": 1.85, "OR": 1.9, "NOT": 0.89}
+_GATE_WIDTH = {"AND": 1.85, "OR": 1.9, "XOR": 1.9, "NOT": 0.89}
 _COLUMN = 3.5
 _LEAF_GAP = 1.15
 
@@ -295,6 +295,8 @@ def render_scene_svg(scene: CircuitScene, values: Mapping[str, int], *,
             gate = logic.And(inputs=2)
         elif node.kind == "OR":
             gate = logic.Or(inputs=2)
+        elif node.kind == "XOR":
+            gate = logic.Xor(inputs=2)
         else:
             gate = logic.Not(extend=False)
         gate = drawing.add(gate.right().anchor("out").at(position.output).color(GATE_COLOR).fill("white"))

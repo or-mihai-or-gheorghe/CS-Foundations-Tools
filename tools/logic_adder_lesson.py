@@ -1,4 +1,4 @@
-"""An interactive lesson built from fixed AND2/OR2/NOT full-adder circuits."""
+"""An interactive lesson from AND2/OR2/NOT full adders to an XOR simplification."""
 
 from __future__ import annotations
 
@@ -9,10 +9,12 @@ from html import escape
 import streamlit as st
 
 from .logic_adder import (
-    FULL_ADDER_TABLE, build_four_bit_adder, build_full_adder,
+    FULL_ADDER_TABLE, build_four_bit_adder, build_full_adder, build_xor_four_bit_adder,
     evaluate_four_bit, parse_operand,
 )
 from .logic_adder_svg import build_adder_scene, render_adder_svg
+from .logic_adder_block_svg import render_adder_blocks_svg
+from .logic_adder_xor_svg import build_xor_adder_scene, render_xor_adder_svg
 from .logic_circuit import evaluate_network, gate_counts
 from .logic_circuit_svg import build_layout, render_circuit_svg, svg_size_px
 from .logic_kmap_sop import build_maps, render_kmap_html
@@ -24,6 +26,12 @@ def _lesson_assets():
     four = build_four_bit_adder()
     return (full, four, build_layout(full.sum_circuit), build_layout(full.carry_circuit),
             build_adder_scene(full), build_adder_scene(four))
+
+
+@lru_cache(maxsize=1)
+def _xor_assets():
+    four = build_xor_four_bit_adder()
+    return four, build_xor_adder_scene(four)
 
 
 def _term(cube):
@@ -61,7 +69,7 @@ def _truth_table(output_index, active_minterm, output_name):
 
 
 def _diagram(name, signature, render_svg, description):
-    """Retain only the most recent SVG for each of the four lesson diagrams."""
+    """Retain only the most recent SVG for each lesson diagram."""
     key = f"adder_svg_{name}"
     previous = st.session_state.get(key)
     if previous is None or previous["signature"] != signature:
@@ -117,7 +125,8 @@ def render():
     st.markdown(
         "Build an unsigned binary adder step by step: **sum bit → carry bit → "
         "one full adder → four connected full adders**. Every AND and OR gate has "
-        "exactly two inputs; each NOT gate has one input."
+        "exactly two inputs; each NOT gate has one input. Finally, simplify the "
+        "same adder using two-input XOR gates."
     )
     st.caption("Wire values: 0 = red, 1 = green. Dots mark connections; crossings without "
                "dots are separate wires. Each diagram fits the page width and keeps its "
@@ -168,8 +177,8 @@ def render():
                 "**C₀ is fixed at 0 inside the circuit**, so there are only eight external "
                 "input bits. All four stages keep their 19 gates: **76 gates in total**.")
     st.markdown("Write each operand **most significant bit first**, from bit 3 to bit 0. "
-                "The top stage FA₀ starts with the **rightmost bit**, then the carry travels "
-                "down through the stages with weights 1, 2, 4 and 8.")
+                "Addition starts at FA₀ with the **rightmost bit**, then the carry travels "
+                "through the stages with weights 1, 2, 4 and 8.")
     st.caption("These two operands control the four-bit simulator independently of the "
                "one-bit switches. Press Enter or leave a field to update the result. "
                "The colors show the stable logical result, without physical gate delays.")
@@ -201,6 +210,39 @@ def render():
            name="Four-bit carry propagation")
     st.caption("At every stage: Aᵢ + Bᵢ + Cᵢ = Sᵢ + 2·Cᵢ₊₁. "
                "Try 1111 + 0001 to follow a carry through all four stages.")
+    st.subheader("Block overview")
+    st.caption("Each box contains one complete full adder. Bit 3 is on the left and bit 0 "
+               "on the right, like the operands you entered. The arrows show carry moving "
+               "right to left, from the fixed C₀ = 0 to the final C₄.")
+    _diagram("four_bit_blocks", (a, b), lambda: render_adder_blocks_svg(four, result.values),
+             f"Four-bit full-adder block overview; A={a}, B={b}; "
+             f"S={result.sum_bits}, C4={result.carry_out}.")
+    st.subheader("Complete AND/OR/NOT circuit")
+    st.caption("The same four blocks are expanded below, with FA₀ at the top and FA₃ "
+               "at the bottom. Carry now travels downward through the same connections.")
     _diagram("four_bit", (a, b), lambda: render_adder_svg(four, four_scene, result.values),
              f"Four-bit ripple-carry circuit; A={a}, B={b}; "
              f"S={result.sum_bits}, C4={result.carry_out}.")
+
+    st.header("5. Simplify with XOR")
+    st.markdown("A two-input **XOR** gate outputs 1 when its inputs differ. The symbol "
+                "⊕ means XOR. Reuse the intermediate signal Pᵢ = Aᵢ ⊕ Bᵢ in both "
+                "branches of each full adder:")
+    st.code("Pᵢ = Aᵢ ⊕ Bᵢ\nSᵢ = Pᵢ ⊕ Cᵢ\nCᵢ₊₁ = Aᵢ·Bᵢ + Pᵢ·Cᵢ", language=None)
+    st.markdown("The carry is 1 when **both operand bits are 1**, or when **exactly one "
+                "operand bit is 1 and an incoming carry is present**. This gives the "
+                "same sum and carry truth tables as the AND/OR/NOT construction.")
+    xor_four, xor_scene = _xor_assets()
+    xor_result = evaluate_four_bit(xor_four, a, b)
+    counts = gate_counts(xor_four.network)
+    st.caption(f"Per bit: 2 XOR + 2 AND + 1 OR = 5 gates. Four bits: {counts['XOR']} XOR "
+               f"+ {counts['AND']} AND + {counts['OR']} OR = {counts['total']} gates "
+               "instead of 76. This counts XOR as one gate; its internal construction "
+               "is not expanded. All gates have two inputs.")
+    st.caption(f"Uses the same operands above: {a} + {b} → S = {xor_result.sum_bits}, "
+               f"C₄ = {xor_result.carry_out}, full result = {xor_result.full_bits}. "
+               "C₀ stays fixed at 0; carry connects FA₀ through FA₃ from top to bottom.")
+    _diagram("four_bit_xor", (a, b), lambda: render_xor_adder_svg(
+        xor_four, xor_scene, xor_result.values),
+        f"Simplified four-bit XOR/AND/OR circuit; A={a}, B={b}; "
+        f"S={xor_result.sum_bits}, C4={xor_result.carry_out}.")
