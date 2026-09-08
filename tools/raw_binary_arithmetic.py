@@ -424,6 +424,9 @@ def _divide_binary_core(a_str: str, b_str: str) -> Tuple[Optional[Dict[str, str]
             # Next chunk (remainder plus enough brought-down bits to be ≥ divisor—or final remainder).
             left_lines.append(pad_left(' ' * rec['next_start'] + rec['next_chunk']))
 
+        # Reserve the right column's three rows even when no subtraction occurred.
+        left_lines.extend([pad_left("")] * max(0, 3 - len(left_lines)))
+
         # Right column with divisor, divider, quotient
         right_lines = [''] * len(left_lines)
         right_lines[0] = divisor

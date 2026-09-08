@@ -87,17 +87,16 @@ def _conversion_block(label: str, value: int, width: int) -> str:
             f"{label} bits: " + mag,
         ]
     else:
-        # 'Set MSB to 1, negate other bits, add 1'
-        neg_others = '1' + ''.join('1' if b == '0' else '0' for b in mag[1:])
+        inverted_mag = _invert_bits(mag)
         tc = _int_to_twos_bits(value, width)
         lines = [
             f"{label} two’s-complement ({width}-bit):",
             "",
             f"abs({label}) = {abs_val}",
             f"Pad to {width} bits: {mag}",
-            "Make MSB 1, NEG the other bits, then add 1:",
-            f"→ MSB=1 & NEG others: {neg_others}",
-            f"→ + 1:                {tc}",
+            "Invert all bits, then add 1 within the selected width:",
+            f"→ Invert all bits: {inverted_mag}",
+            f"→ + 1:             {tc}",
             f"{label} bits: " + tc,
         ]
     return "```\n" + "\n".join(lines) + "\n```"
@@ -106,11 +105,14 @@ def _conversion_block(label: str, value: int, width: int) -> str:
 # Core column addition (on fixed-width bit strings)
 # ============================================================
 
-def _add_bits_with_explanation(a_bits: str, b_bits: str) -> Tuple[Dict[str, str], List[str]]:
+def _add_bits_with_explanation(
+    a_bits: str, b_bits: str, *, explain_overflow: bool = True
+) -> Tuple[Dict[str, str], List[str]]:
     """
     Add two fixed-width two's-complement bit-strings (same length) and return
     { result_bits, result_value, carry_in_msb, carry_out_msb, overflow_bool, overflow_kind }
     plus a detailed step-by-step explanation with code blocks.
+    explain_overflow controls only the addition overflow explanation.
     """
     width = len(a_bits)
     max_len = width
@@ -208,21 +210,21 @@ def _add_bits_with_explanation(a_bits: str, b_bits: str) -> Tuple[Dict[str, str]
             "so the result bits shown are the correct wrapped result."
         )
 
-    # Overflow explanation
-    rule_lines = [
-        "Overflow rule (two's complement):",
-        "",
-        "- Overflow occurs when adding two numbers with the **same sign** and the **result sign differs**.",
-        f"- Signs: A={sign_a}, B={sign_b}, Result={sign_r}.",
-        f"- Carry into MSB={carry_into_msb}, carry out of MSB={carry_out_of_msb} → "
-        f"{'overflow' if (carry_into_msb != carry_out_of_msb) else 'no overflow'} by carry rule.",
-    ]
-    if overflow:
-        rule_lines.append(f"→ **{overflow_kind}** detected. The bit-pattern below is the wrapped result.")
-    else:
-        rule_lines.append("→ No overflow detected.")
+    if explain_overflow:
+        rule_lines = [
+            "Overflow rule (two's complement):",
+            "",
+            "- Overflow occurs when adding two numbers with the **same sign** and the **result sign differs**.",
+            f"- Signs: A={sign_a}, B={sign_b}, Result={sign_r}.",
+            f"- Carry into MSB={carry_into_msb}, carry out of MSB={carry_out_of_msb} → "
+            f"{'overflow' if (carry_into_msb != carry_out_of_msb) else 'no overflow'} by carry rule.",
+        ]
+        if overflow:
+            rule_lines.append(f"→ **{overflow_kind}** detected. The bit-pattern below is the wrapped result.")
+        else:
+            rule_lines.append("→ No overflow detected.")
 
-    explanation.append("```\n" + "\n".join(rule_lines) + "\n```")
+        explanation.append("```\n" + "\n".join(rule_lines) + "\n```")
 
     results = {
         "result_bits": result_bits,
@@ -256,7 +258,7 @@ def _add_tc_core(a_str: str, b_str: str, width: int) -> Tuple[Dict[str, str], Li
         "- Take **ABS(value)** and write its binary.\n"
         f"- **Pad left** with 0s to **{width} bits**.\n"
         "- If the original is **positive** (sign 0), keep it.\n"
-        "- If it’s **negative** (sign 1), **make the first bit 1**, **NEG** the other bits, then **add 1**."
+        "- If it’s **negative** (sign 1), **invert all bits**, then **add 1** within the selected width."
     )
     setup = [
         "Setup:",
@@ -312,7 +314,7 @@ def _sub_tc_core(a_str: str, b_str: str, width: int) -> Tuple[Dict[str, str], Li
         "- Take **ABS(value)** and write its binary.\n"
         f"- **Pad left** with 0s to **{width} bits**.\n"
         "- If the original is **positive** (sign 0), keep it.\n"
-        "- If it’s **negative** (sign 1), **make the first bit 1**, **NEG** the other bits, then **add 1**."
+        "- If it’s **negative** (sign 1), **invert all bits**, then **add 1** within the selected width."
     )
     setup = [
         "Setup:",
@@ -321,7 +323,7 @@ def _sub_tc_core(a_str: str, b_str: str, width: int) -> Tuple[Dict[str, str], Li
         f"Operand A: {a_str} → {a_bits} (value {a_val})",
         f"Operand B: {b_str} → {b_bits} (value {b_val})",
         "",
-        "We compute subtraction as **A - B = A + (two's complement of B)**.",
+        f"We compute the result bits of A - B as A + (~B + 1), modulo 2^{width}.",
     ]
     explanation.append("```\n" + "\n".join(setup) + "\n```")
     # Per-operand conversion mini-traces
@@ -335,7 +337,7 @@ def _sub_tc_core(a_str: str, b_str: str, width: int) -> Tuple[Dict[str, str], Li
     neg_b_bits = add_neg["result_bits"]
     neg_b_val = _twos_bits_to_int(neg_b_bits)
 
-    explanation.append("### 2. Build -B using two's complement")
+    explanation.append("### 2. Build the fixed-width negation of B")
     block = [
         "Two's complement of B (within width):",
         "",
@@ -343,22 +345,49 @@ def _sub_tc_core(a_str: str, b_str: str, width: int) -> Tuple[Dict[str, str], Li
         f"~B:  {inv}",
         f"+1:  {one}",
         "-" * (width + 2),
-        f"-B:  {neg_b_bits}  (value {neg_b_val})",
+        f"Negation modulo 2^{width}: {neg_b_bits} (signed interpretation {neg_b_val})",
+        f"Mathematical -B: {-b_val}",
     ]
     explanation.append("```\n" + "\n".join(block) + "\n```")
+    if b_val == lo:
+        explanation.append(
+            f"The mathematical value -B = {-b_val} is outside [{lo}, {hi}] and cannot be "
+            f"represented as a signed {width}-bit integer. Its negation encoding wraps to "
+            f"`{neg_b_bits}`, whose signed interpretation is {neg_b_val}."
+        )
 
-    # Now perform A + (-B)
-    explanation.append("### 3. Add A + (-B)")
-    add_res, add_steps = _add_bits_with_explanation(a_bits, neg_b_bits)
+    # Add the fixed-width encodings, then assess the original subtraction.
+    explanation.append("### 3. Add A and the negation bits")
+    explanation.append("The second operand in this addition trace is the fixed-width negation of B.")
+    add_res, add_steps = _add_bits_with_explanation(a_bits, neg_b_bits, explain_overflow=False)
     explanation.extend(add_steps)
 
     result_bits = add_res["result_bits"]
     result_val = _twos_bits_to_int(result_bits)
-    overflow = add_res["overflow"] == "True"
-    overflow_kind = add_res["overflow_kind"]
+    exact_result = a_val - b_val
+    overflow = exact_result < lo or exact_result > hi
+    overflow_kind = ""
+    if overflow:
+        overflow_kind = "positive overflow" if exact_result > hi else "negative overflow (underflow)"
+
+    rule_lines = [
+        "Subtraction overflow rule (two's complement):",
+        "",
+        "- Overflow occurs when the original operands have different signs and the result sign differs from A.",
+        f"- Original signs: A={a_bits[0]}, B={b_bits[0]}; result sign={result_bits[0]}.",
+        f"- Exact difference: {exact_result}; representable range: [{lo}, {hi}].",
+    ]
+    if overflow:
+        rule_lines.append(f"→ **{overflow_kind}** detected. The bit-pattern is the wrapped result.")
+    else:
+        rule_lines.append("→ No overflow detected.")
+    explanation.append("```\n" + "\n".join(rule_lines) + "\n```")
 
     explanation.append("### 4. Final Result")
-    final_msg = [f"**Answer:** `{a_val} - {b_val} = {result_val}`  (bits: `{result_bits}`)"]
+    final_msg = [
+        f"**Exact result:** `{a_val} - ({b_val}) = {exact_result}`.",
+        f"**Wrapped {width}-bit signed result:** `{result_val}` (bits: `{result_bits}`).",
+    ]
     if overflow:
         final_msg.append(f"**Overflow:** {overflow_kind}.")
     explanation.append("\n".join(final_msg))

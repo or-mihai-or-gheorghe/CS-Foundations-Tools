@@ -13,6 +13,7 @@
 # Display: Streamlit + embedded HTML/CSS (no external libs)
 
 from __future__ import annotations
+import ast
 import re
 import itertools as it
 from typing import List, Tuple, Dict, Set, Optional
@@ -76,11 +77,18 @@ def _norm_expr(s: str) -> Tuple[str, List[str]]:
     # Convert all user aliases into a simple, consistent internal format.
     # Use single characters: '&' for AND, '|' for OR, '!' for prefix NOT.
     s = s.strip()
+    # Recognize words before removing their whitespace boundaries.
+    s = re.sub(_OR_ALIASES, '|', s, flags=re.IGNORECASE)
+    s = re.sub(_AND_ALIASES, '&', s, flags=re.IGNORECASE)
+    s = re.sub(_NOT_ALIASES, '!', s, flags=re.IGNORECASE)
     s = re.sub(r"[\s_]+", "", s)
+    # Retain the original pass for existing forms such as N_O_T(A).
     s = re.sub(_OR_ALIASES, '|', s, flags=re.IGNORECASE)
     s = re.sub(_AND_ALIASES, '&', s, flags=re.IGNORECASE)
     s = re.sub(_NOT_ALIASES, '!', s, flags=re.IGNORECASE)
     s = s.upper()
+    if not re.fullmatch(r"[A-E01&|!()']+", s):
+        raise ValueError("Use variables A–E, constants 0/1, and supported Boolean operators.")
 
     # Stage 2: Adjacency Insertion.
     # On the canonical string, insert the explicit '&' for adjacency.
@@ -97,11 +105,11 @@ def _norm_expr(s: str) -> Tuple[str, List[str]]:
     s = "".join(result)
 
     # Stage 3: Translation to Python's Boolean Syntax.
-    # Convert the canonical format to a guaranteed-valid Python expression.
+    # Convert the canonical format to Python, then validate its syntax below.
 
     # First, handle all forms of negation (postfix ' and prefix !).
     # The order is crucial: handle specific primes before the general '!' prefix.
-    # A loop handles nested structures like ((A&B)')'.
+    # Repeat for supported chains of negation such as A''.
     while "'" in s or '!' in s:
         s_before = s
         # Handle primes on parenthesized groups: (X)' -> not(X)
@@ -120,6 +128,24 @@ def _norm_expr(s: str) -> Tuple[str, List[str]]:
     s = s.replace('&', ' and ')
     s = s.replace('|', ' or ')
 
+    try:
+        parsed = ast.parse(s, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError("Invalid Boolean expression syntax. Check operators and parentheses.") from exc
+    allowed_nodes = (
+        ast.Expression, ast.BoolOp, ast.UnaryOp, ast.Name, ast.Load,
+        ast.And, ast.Or, ast.Not, ast.Constant,
+    )
+    for node in ast.walk(parsed):
+        if not isinstance(node, allowed_nodes):
+            raise ValueError("Only Boolean operations on A–E and constants 0/1 are supported.")
+        if isinstance(node, ast.Name) and node.id not in VAR_SET:
+            raise ValueError("Use variables A–E only.")
+        if isinstance(node, ast.Constant) and (
+            type(node.value) is not int or node.value not in (0, 1)
+        ):
+            raise ValueError("Only Boolean constants 0 and 1 are supported.")
+
     used = sorted({ch for ch in s if ch in VAR_SET}, key=lambda v: VAR_SET.index(v))
     return s, used
 
@@ -137,7 +163,7 @@ def _eval_expr_to_minterms(expr: str, var_order: List[str]) -> Set[int]:
     # Build all assignments (MSB first)
     for bits in it.product([0,1], repeat=n):
         env = {var_order[i]: bool(bits[i]) for i in range(n)}
-        val = eval(py_expr, {"__builtins__": {}}, env)  # safe enough; no names other than A..E exist
+        val = eval(py_expr, {"__builtins__": {}}, env)  # Boolean syntax and names validated above.
         if bool(val):
             idx = bitstr_to_int(list(bits))
             ones.add(idx)
@@ -431,7 +457,7 @@ EXAMPLES = [
     "A + B·C",
     "A'B + C(D + E')",
     "a b' + !c",
-    "(A + B)(C' + D)  # adjacency means AND",
+    "(A + B)(C' + D)",  # adjacency means AND
     "A + B + C",  # <= 3 vars
 ]
 
@@ -498,19 +524,19 @@ are shown with translucency and distinct colors.
             # Normalize & detect used variables
             try:
                 py_expr, used = _norm_expr(expr)
-            except Exception as e:
+                if not used:
+                    st.error("No variables found. Use A..E.")
+                    return
+                if len(used) > 5:
+                    st.error("Use at most 5 variables.")
+                    return
+
+                nvars = len(used)
+                var_order = [v for v in VAR_SET if v in used][:nvars]
+                ones = _eval_expr_to_minterms(expr, var_order)
+            except ValueError as e:
                 st.error(f"Parse error: {e}")
                 return
-            if not used:
-                st.error("No variables found. Use A..E.")
-                return
-            if len(used) > 5:
-                st.error("Use at most 5 variables.")
-                return
-
-            nvars = len(used)
-            var_order = [v for v in VAR_SET if v in used][:nvars]
-            ones = _eval_expr_to_minterms(expr, var_order)
             dcs  = set()
 
             _run_kmap_pipeline(nvars, var_order, ones, dcs, source_label="(from expression)")

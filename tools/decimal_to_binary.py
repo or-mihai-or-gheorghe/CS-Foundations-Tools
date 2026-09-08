@@ -1,7 +1,7 @@
 # tools/decimal_to_binary.py
 
 import streamlit as st
-from decimal import Decimal, getcontext
+from decimal import Decimal, getcontext, localcontext
 
 # High precision so fractional steps and rounding are stable
 getcontext().prec = 200
@@ -157,28 +157,33 @@ def _decimal_to_binary_core(number_str: str, frac_bits: int, rounding: str):
 
     # 3) Fractional part: repeated multiplication by 2 (friendlier output)
     explanation.append("\n### 2) Fractional Part via Repeated Multiplication by 2")
+    fractional_remainder_nonzero = False
     if frac_part_str == "" or int(frac_part_str) == 0:
         frac_bits_full = ""
         explanation.append("- Fractional part is 0 ⇒ binary fractional part is empty (or all zeros).")
     else:
-        f = Decimal("0." + frac_part_str)
-        steps = []
-        out_bits = []
-        # We generate extra bits for rounding if needed
-        extra = 4 if rounding == "nearest-even" else 0
-        limit = frac_bits + extra if frac_bits > 0 else (extra if extra > 0 else 64)  # keep a cap in case user chose 0 bits
-        # Friendlier, compact per-step lines
-        for k in range(1, limit + 1):
-            before = _fmt_dec_short(f)
-            f *= 2
-            bit = int(f)  # 0 or 1
-            after = _fmt_dec_short(f)
-            remainder = _fmt_dec_short(f - bit)
-            out_bits.append(str(bit))
-            steps.append(f"Step {k}: {before} × 2 = {after} ⇒ take {bit}; remainder {remainder}")
-            f -= bit
-            if f == 0:
-                break
+        with localcontext() as fractional_context:
+            # Multiplication by two can add one digit to the exact coefficient.
+            fractional_context.prec = max(200, len(frac_part_str) + 1)
+            f = Decimal("0." + frac_part_str)
+            steps = []
+            out_bits = []
+            # We generate extra bits for rounding if needed
+            extra = 4 if rounding == "nearest-even" else 0
+            limit = frac_bits + extra if frac_bits > 0 else (extra if extra > 0 else 64)  # keep a cap in case user chose 0 bits
+            # Friendlier, compact per-step lines
+            for k in range(1, limit + 1):
+                before = _fmt_dec_short(f)
+                f *= 2
+                bit = int(f)  # 0 or 1
+                after = _fmt_dec_short(f)
+                remainder = _fmt_dec_short(f - bit)
+                out_bits.append(str(bit))
+                steps.append(f"Step {k}: {before} × 2 = {after} ⇒ take {bit}; remainder {remainder}")
+                f -= bit
+                if f == 0:
+                    break
+            fractional_remainder_nonzero = f != 0
         frac_bits_full = ''.join(out_bits)
         explanation.append("Multiplication by 2 steps:")
         explanation.append("```\n" + "\n".join(steps[:64]) + ("\n..." if len(steps) > 64 else "") + "\n```")
@@ -195,7 +200,7 @@ def _decimal_to_binary_core(number_str: str, frac_bits: int, rounding: str):
         if rounding == "nearest-even":
             # Look at the first fractional bit (guard) and sticky
             guard = int(frac_bits_full[0]) if len(frac_bits_full) >= 1 else 0
-            sticky = 1 if ('1' in frac_bits_full[1:]) else 0
+            sticky = int('1' in frac_bits_full[1:] or fractional_remainder_nonzero)
             lsb_even = (integer_value % 2 == 0)
             round_up = (guard == 1) and ((sticky == 1) or (not lsb_even))
             carry = 1 if round_up else 0
@@ -220,7 +225,7 @@ def _decimal_to_binary_core(number_str: str, frac_bits: int, rounding: str):
                     explanation.append("- Truncate mode: we keep the first k bits and drop the rest.")
             else:
                 guard = 1 if tail[:1] == '1' else 0
-                sticky = 1 if '1' in tail[1:] else 0
+                sticky = int('1' in tail[1:] or fractional_remainder_nonzero)
                 lsb = int(kept[-1]) if kept else 0
                 round_up = (guard == 1 and (sticky == 1 or lsb == 1))
                 explanation.append(f"- Nearest-even: guard={guard}, sticky={sticky}, LSB={lsb} ⇒ round_up={round_up}")
@@ -246,13 +251,16 @@ def _decimal_to_binary_core(number_str: str, frac_bits: int, rounding: str):
     full_bin = ('-' if sign == '-' else '') + bin_str
 
     # Compute back to decimal (for display/verification)
-    dec_from_bits = Decimal(integer_value)
-    if frac_bits > 0:
-        for i, b in enumerate(frac_bits_final, start=1):
-            if b == '1':
-                dec_from_bits += Decimal(2) ** Decimal(-i)
-    if sign == '-':
-        dec_from_bits = -dec_from_bits
+    with localcontext() as reconstruction_context:
+        # A k-bit binary fraction has at most k decimal places exactly.
+        reconstruction_context.prec = max(200, len(str(integer_value)) + frac_bits + 1)
+        dec_from_bits = Decimal(integer_value)
+        if frac_bits > 0:
+            for i, b in enumerate(frac_bits_final, start=1):
+                if b == '1':
+                    dec_from_bits += Decimal(2) ** Decimal(-i)
+        if sign == '-':
+            dec_from_bits = -dec_from_bits
 
     # 6) LaTeX explanation for value
     explanation.append("\n### 4) Mathematical Form (Value Reconstruction)")

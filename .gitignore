@@ -22,6 +22,9 @@ merged_code.py
 # Firebase implementation plan (development tracking)
 FIREBASE_IMPLEMENTATION_PLAN.md
 
+# Local roadmap and analysis findings
+/roadmap_and_known_issues.md
+
 # Streamlit secrets (NEVER commit)
 .streamlit/secrets.toml
 

@@ -18,9 +18,9 @@ def _format_nibbles(bits: str) -> str:
     # "001100010100" -> "0011 0001 0100"
     return " ".join(bits[i:i+4] for i in range(0, len(bits), 4))
 
-def _parse_bcd_operand(s: str) -> Tuple[Optional[List[int]], Optional[str], Optional[int], Optional[str]]:
+def _parse_bcd_operand(s: str, input_format: str = "Decimal") -> Tuple[Optional[List[int]], Optional[str], Optional[int], Optional[str]]:
     """
-    Accepts a decimal string (e.g., '12345') or a raw BCD bitstring (e.g., '0001 0010 0011').
+    Interpret the operand in the explicitly selected Decimal or BCD format.
     Returns (digits[], bits, decimal_value, error).
     Only non-negative values are supported in this tool.
     """
@@ -32,12 +32,16 @@ def _parse_bcd_operand(s: str) -> Tuple[Optional[List[int]], Optional[str], Opti
     if raw.startswith("-"):
         return None, None, None, "Negative operands are not supported in BCD tool (use two’s-complement tool)."
 
-    if all(c.isdigit() for c in raw):
+    if input_format == "Decimal":
+        if not all(c in "0123456789" for c in raw):
+            return None, None, None, "Decimal input must contain only digits 0-9."
         digits = [int(c) for c in raw]
         bits = _digits_to_bcd_bits(digits)
         return digits, bits, int(raw, 10), None
 
-    if all(c in "01" for c in raw) and len(raw) % 4 == 0:
+    if input_format == "BCD":
+        if not all(c in "01" for c in raw) or len(raw) % 4 != 0:
+            return None, None, None, "BCD input must contain bits in groups of four (e.g., 0001 0010)."
         digits: List[int] = []
         for i in range(0, len(raw), 4):
             nib = raw[i:i+4]
@@ -49,7 +53,7 @@ def _parse_bcd_operand(s: str) -> Tuple[Optional[List[int]], Optional[str], Opti
         dec = int("".join(str(d) for d in digits)) if digits else 0
         return digits, bits, dec, None
 
-    return None, None, None, "Enter decimal digits (e.g., 1234) or BCD bits of length multiple of 4 (e.g., 0001 0010)."
+    return None, None, None, "Select Decimal or BCD as the input format."
 
 def _pad_digits(a: List[int], b: List[int]) -> Tuple[List[int], List[int]]:
     n = max(len(a), len(b))
@@ -59,13 +63,13 @@ def _pad_digits(a: List[int], b: List[int]) -> Tuple[List[int], List[int]]:
 # BCD Addition (digit by digit with +0110 correction)
 # ------------------------------------------------------------
 
-def _bcd_add_core(a_in: str, b_in: str) -> Tuple[dict, List[str]]:
+def _bcd_add_core(a_in: str, b_in: str, *, a_format: str = "Decimal", b_format: str = "Decimal") -> Tuple[dict, List[str]]:
     """
     BCD addition for non-negative operands.
     Returns results + a list of explanation blocks (some inside expanders).
     """
-    a_digits, a_bits, a_val, err_a = _parse_bcd_operand(a_in)
-    b_digits, b_bits, b_val, err_b = _parse_bcd_operand(b_in)
+    a_digits, a_bits, a_val, err_a = _parse_bcd_operand(a_in, a_format)
+    b_digits, b_bits, b_val, err_b = _parse_bcd_operand(b_in, b_format)
     if err_a or err_b:
         return {"error": err_a or err_b}, [err_a or err_b]
 
@@ -180,14 +184,14 @@ def _bcd_add_core(a_in: str, b_in: str) -> Tuple[dict, List[str]]:
 # BCD Subtraction (digit by digit with borrow and +1010 correction)
 # ------------------------------------------------------------
 
-def _bcd_sub_core(a_in: str, b_in: str) -> Tuple[dict, List[str]]:
+def _bcd_sub_core(a_in: str, b_in: str, *, a_format: str = "Decimal", b_format: str = "Decimal") -> Tuple[dict, List[str]]:
     """
     BCD subtraction for non-negative operands.
     If A < B, we compute (B - A) and prefix a '-' in the decimal result, while still showing
     the borrow/correction steps for the magnitude.
     """
-    a_digits, a_bits, a_val, err_a = _parse_bcd_operand(a_in)
-    b_digits, b_bits, b_val, err_b = _parse_bcd_operand(b_in)
+    a_digits, a_bits, a_val, err_a = _parse_bcd_operand(a_in, a_format)
+    b_digits, b_bits, b_val, err_b = _parse_bcd_operand(b_in, b_format)
     if err_a or err_b:
         return {"error": err_a or err_b}, [err_a or err_b]
 
@@ -302,24 +306,27 @@ def render() -> None:
     st.title("BCD Arithmetic (Addition & Subtraction)")
     st.markdown(
         "Perform **BCD** (Binary-Coded Decimal) addition and subtraction on **non-negative** operands.\n"
-        "- Enter plain decimal (e.g., `1234`) or raw BCD bits (e.g., `0001 0010 0011`).\n"
+        "- Select **Decimal** or **BCD** for each operand, then enter its value.\n"
+        "- Decimal example: `1234`. BCD example: `0001 0010 0011` (spaces or underscores are optional).\n"
         "- Addition fixes invalid digits by **adding 0110** to a nibble that overflowed.\n"
         "- Subtraction borrows as needed and corrects the nibble by **adding 1010** (decimal 10)."
     )
 
     col1, col2 = st.columns(2)
     with col1:
-        a_in = st.text_input("Operand A", "1234")
+        a_format = st.selectbox("Operand A format", ("Decimal", "BCD"), key="bcd_format_a")
+        a_in = st.text_input("Operand A", "1234", key="bcd_operand_a")
     with col2:
-        b_in = st.text_input("Operand B", "567")
+        b_format = st.selectbox("Operand B format", ("Decimal", "BCD"), key="bcd_format_b")
+        b_in = st.text_input("Operand B", "567", key="bcd_operand_b")
 
     op = st.radio("Operation", ("Addition", "Subtraction"), horizontal=True)
 
     if st.button("Calculate", key="calc_bcd"):
         if op == "Addition":
-            results, expl = _bcd_add_core(a_in, b_in)
+            results, expl = _bcd_add_core(a_in, b_in, a_format=a_format, b_format=b_format)
         else:
-            results, expl = _bcd_sub_core(a_in, b_in)
+            results, expl = _bcd_sub_core(a_in, b_in, a_format=a_format, b_format=b_format)
 
         if "error" in results:
             st.error(results["error"])

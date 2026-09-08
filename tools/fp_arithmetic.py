@@ -283,8 +283,12 @@ def perform_fp_addition(num_a_str, num_b_str, precision, input_type):
         # Overflow: shift right by 1
         explanation.append("- Overflow detected (carry bit set)")
         explanation.append("- Shift mantissa RIGHT by 1 and increment exponent")
-        result_mantissa = result_mantissa[:-1]  # Remove the last bit
-        target_exp += 1
+        lost_bit = result_mantissa[-1]
+        result_mantissa = result_mantissa[:-1]
+        if lost_bit == '1':
+            result_mantissa = result_mantissa[:-1] + '1'
+            explanation.append("- Discarded bit was 1: preserve it in the sticky bit")
+        target_exp_unbiased += 1
         leading_one_pos = 0
     
     # Normalize: shift so leading 1 is at position 0
@@ -308,7 +312,7 @@ def perform_fp_addition(num_a_str, num_b_str, precision, input_type):
     
     # Convert unbiased exponent to biased and handle underflow/overflow
     exp_min = 1 - params['bias']  # Minimum normal exponent (unbiased)
-    exp_max = ((1 << params['exp_bits']) - 1) - params['bias']  # Maximum exponent (unbiased)
+    exp_max = ((1 << params['exp_bits']) - 2) - params['bias']  # Maximum finite exponent (unbiased)
 
     if target_exp_unbiased < exp_min:
         # Underflow: may become denormalized or zero
