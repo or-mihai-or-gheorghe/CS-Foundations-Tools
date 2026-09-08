@@ -18,7 +18,7 @@ from .logic_circuit import Circuit
 
 Point = tuple[float, float]
 Box = tuple[float, float, float, float]
-SIGNAL_COLORS = {0: "#64748b", 1: "#0369a1"}
+SIGNAL_COLORS = {0: "#dc2626", 1: "#15803d"}
 GATE_COLOR = "#17212b"
 _GATE_WIDTH = {"AND": 1.85, "OR": 1.9, "NOT": 0.89}
 _COLUMN = 3.5

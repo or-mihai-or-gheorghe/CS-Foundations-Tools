@@ -533,19 +533,17 @@ def _render_circuit(snapshot):
     width, height = svg_size_px(svg_bytes)
     image_data = base64.b64encode(svg_bytes).decode("ascii")
     description = escape(f"AND/OR/NOT circuit for F = {result.sop}. {inputs_text}; F={signals[circuit.output]}.")
-    # Reserve both image dimensions so asynchronous SVG decoding cannot collapse
-    # the scroll area. The native container survives HTML updates.
+    # Fit the whole circuit to the page width and let its height grow naturally.
+    # Reserve its aspect ratio while the browser decodes the SVG image.
     # SVG is an image because st.html's HTML-only sanitizer removes inline svg.
-    with st.container(height=min(480, max(180, int(height + 28))),
-                      key=f"kmap_circuit_{generation}"):
-        st.html(
-            f'<div role="region" aria-label="Logic circuit diagram" tabindex="0">'
-            f'<img alt="{description}" src="data:image/svg+xml;base64,{image_data}" '
-            f'style="display:block;width:{width * zoom / 100:.2f}px;'
-            f'height:{height * zoom / 100:.2f}px;max-width:none;" />'
-            '</div>'
-        )
-    st.caption("Wire values: 0 = gray, 1 = blue. Dots mark connections; crossings without dots are separate wires. "
-               "Use the scroll area to explore larger circuits.")
+    st.html(
+        f'<div role="region" aria-label="Logic circuit diagram">'
+        f'<img alt="{description}" src="data:image/svg+xml;base64,{image_data}" '
+        f'style="display:block;width:{width * zoom / 100:.2f}px;max-width:100%;'
+        f'height:auto;aspect-ratio:{width:.6f}/{height:.6f};" />'
+        '</div>'
+    )
+    st.caption("Wire values: 0 = red, 1 = green. Dots mark connections; crossings without dots are separate wires. "
+               "The diagram scales to fit the page width.")
     st.download_button("Download SVG", data=svg_bytes, file_name="kmap_circuit.svg",
                        mime="image/svg+xml", key="kmap_download_svg")

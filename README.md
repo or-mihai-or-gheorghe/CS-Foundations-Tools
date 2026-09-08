@@ -38,6 +38,7 @@ This application provides hands-on, interactive tools for learning low-level com
   - Exact SOP minimization, including don't-cares and five-variable groups
   - Two-input AND/OR gates, shared NOT gates, and interactive 0/1 simulation
   - Circuit zoom and standalone SVG export
+  - Full circuit displayed on the page, with red (0) and green (1) signal wires
 
 ### Games Hub (3 games)
 Interactive timed games to practice and master binary operations with competitive leaderboards.
