@@ -93,19 +93,27 @@ def _function_section(full, result, circuit, layout, values, signature, name, ti
     st.header(title)
     st.markdown(explanation)
     minterm = signature[0] * 4 + signature[1] * 2 + signature[2]
-    _truth_table(3 if name == "sum" else 4, minterm, "S" if name == "sum" else "Cout")
-    st.subheader("Karnaugh map")
-    model = build_maps(3, list(result.var_order))
-    cell_values = {m: str(int(m in result.ones)) for m in range(8)}
-    st.html(render_kmap_html(model, cell_values, result.cover,
-                            input_labels={"C": "Cin"}, compact_headers=True,
-                            active_minterm=minterm))
-    st.caption("Rows: A. Columns: (B, Cin) in Gray order 00, 01, 11, 10. "
-               "The dark dashed outline marks the current input, even when its output is 0.")
     output = "S" if name == "sum" else "Cout"
-    st.code(f"{output} = " + " + ".join(_term(cube) for cube in result.cover), language=None)
-    for index, cube in enumerate(result.cover, 1):
-        st.markdown(f"**G{index} / T{index}:** `{sorted(cube.covered_minterms)}` → `{_term(cube)}`")
+    # Horizontal containers wrap whole panels; 300 px also fits the K-map.
+    with st.container(horizontal=True, key=f"adder_{name}_analysis"):
+        with st.container(width=300, key=f"adder_{name}_truth_table"):
+            st.subheader("Truth table")
+            _truth_table(3 if name == "sum" else 4, minterm, output)
+        with st.container(width=300, key=f"adder_{name}_kmap"):
+            st.subheader("Karnaugh map")
+            model = build_maps(3, list(result.var_order))
+            cell_values = {m: str(int(m in result.ones)) for m in range(8)}
+            st.html(render_kmap_html(model, cell_values, result.cover,
+                                    input_labels={"C": "Cin"}, compact_headers=True,
+                                    active_minterm=minterm))
+            st.caption("Rows: A. Columns: (B, Cin) in Gray order 00, 01, 11, 10. "
+                       "The dark dashed outline marks the current input, even when its output is 0.")
+        with st.container(width=300, key=f"adder_{name}_groups"):
+            st.subheader("Minimized function")
+            st.code(f"{output} = " + " + ".join(_term(cube) for cube in result.cover),
+                    language=None, wrap_lines=True)
+            for index, cube in enumerate(result.cover, 1):
+                st.markdown(f"**G{index} / T{index}:** `{sorted(cube.covered_minterms)}` → `{_term(cube)}`")
     stage = full.stages[0]
     mapping = stage.sum_nodes if name == "sum" else stage.carry_nodes
     local_values = {local: values[global_id] for local, global_id in mapping}
@@ -145,8 +153,7 @@ def render():
     st.caption("These three switches control both truth tables, both K-maps and the first "
                "three circuits. Cin is the carry arriving from the previous bit. "
                f"Current minterm: m = 4A + 2B + Cin = {signature[0]*4+signature[1]*2+signature[2]}.")
-    st.info("In the Boolean formulas below, + means OR, · means AND and ' means NOT. "
-            "In the arithmetic identity A + B + Cin = S + 2·Cout, + means addition.")
+    st.info("In the Boolean formulas below, + means OR, · means AND and ' means NOT.")
 
     _function_section(full, full.sum_result, full.sum_circuit, sum_layout, values, signature,
                       "sum", "1. Sum bit — S",
