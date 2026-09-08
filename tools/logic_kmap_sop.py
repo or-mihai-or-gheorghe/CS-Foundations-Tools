@@ -486,7 +486,7 @@ def _render_result(snapshot):
     st.subheader("K-map (Karnaugh)")
     html = render_kmap_html(model, values, result.cover)
     height = model["R"] * 44 + (model["R"] - 1) * 4 + 68
-    st.components.v1.html(html, height=height, scrolling=True)
+    st.iframe(html, height=height)
     st.caption("G labels identify logical groups, including segments across map edges. "
                "For five variables, one group may occupy separated segments. "
                "X cells can enlarge a group but do not need to be covered.")

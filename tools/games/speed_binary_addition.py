@@ -70,6 +70,8 @@ def render_compact_timer(start_time: float, duration: int = 60) -> None:
         updateTimer();
     </script>
     <style>
+        html {{ overflow: hidden; }}
+
         #compact-timer {{
             margin-bottom: 12px;
         }}
@@ -105,7 +107,7 @@ def render_compact_timer(start_time: float, duration: int = 60) -> None:
         }}
     </style>
     """
-    st.components.v1.html(html, height=50)
+    st.iframe(html, height=50)
 
 # ========================= Game State Management =========================
 
@@ -449,7 +451,7 @@ def render_game_screen():
                     st.error("❌ Invalid input! Please enter only 0s and 1s.")
 
         # Auto-focus JavaScript
-        st.components.v1.html("""
+        st.iframe("""
             <script>
                 setTimeout(function() {
                     const inputs = window.parent.document.querySelectorAll('input[type="text"]');
@@ -458,7 +460,7 @@ def render_game_screen():
                     }
                 }, 100);
             </script>
-        """, height=0)
+        """, height=1, tab_index=-1)
 
     # Quit button
     st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)

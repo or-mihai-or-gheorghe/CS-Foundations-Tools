@@ -165,7 +165,7 @@ def render() -> None:
     st.title("CRC Encoder")
 
     st.markdown(
-    """
+    r"""
 Encode a message with a **Cyclic Redundancy Check (CRC)** using polynomial division over $ \mathrm{GF}(2) $.
 
 ### Rules (no reflection, init=0, xorout=0)
@@ -284,7 +284,7 @@ $$
 
         # 5) Notes
         st.markdown(
-            """
+            r"""
 **Notes**
 - Arithmetic is in $ \mathrm{GF}(2) $: subtraction = addition = XOR.
 - This tool uses the textbook CRC model (no bit reflection, zero initial register, no final XOR).

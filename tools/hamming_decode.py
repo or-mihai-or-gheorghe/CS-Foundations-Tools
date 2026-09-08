@@ -353,7 +353,7 @@ matrix \(H\) as in the encoder.
 
         # 7) Note on 2-bit errors
         st.markdown(
-            "> **Note:** With full-length Hamming \((n=2^p-1)\), a 2-bit error can produce a syndrome that "
+            r"> **Note:** With full-length Hamming \((n=2^p-1)\), a 2-bit error can produce a syndrome that "
             "matches another column, causing a *mis-correction*. To reliably detect double errors, use "
             "**extended Hamming (SECDED)** with an overall parity bit."
         )
