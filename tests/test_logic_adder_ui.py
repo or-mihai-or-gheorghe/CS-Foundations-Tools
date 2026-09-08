@@ -13,6 +13,11 @@ from tools.logic_kmap_sop import build_maps, render_kmap_html
 
 class AdderLessonUI(unittest.TestCase):
     diagram_names = ("sum", "carry", "full_adder", "four_bit_blocks", "four_bit", "four_bit_xor")
+    switch_groups = ("sum_bit", "sum_circuit", "carry_bit", "carry_circuit", "full_adder")
+    input_names = ("A", "B", "Cin")
+
+    def switch_key(self, group, bit):
+        return f"adder_input_{bit}" if group == "sum_bit" else f"adder_input_{group}_{bit}"
 
     def app(self):
         app = AppTest.from_string(
@@ -39,13 +44,60 @@ class AdderLessonUI(unittest.TestCase):
         app.run()
         self.clean(app)
 
+    def assert_one_bit_state(self, app, expected):
+        """Check every input copy and every consumer after a single widget event."""
+        self.clean(app)
+        self.assertEqual(app.session_state["adder_one_bit_inputs"], expected)
+        self.assertEqual([toggle.key for toggle in app.toggle], [
+            self.switch_key(group, bit)
+            for group in self.switch_groups for bit in self.input_names
+        ])
+        for group in self.switch_groups:
+            for bit in self.input_names:
+                toggle = app.toggle(key=self.switch_key(group, bit))
+                self.assertEqual(toggle.value, expected[bit])
+                self.assertEqual(toggle.label, f"{bit}={int(expected[bit])}")
+        signature = tuple(int(expected[bit]) for bit in self.input_names)
+        minterm = signature[0] * 4 + signature[1] * 2 + signature[2]
+        total = sum(signature)
+        outputs = {"S": total % 2, "Cout": total // 2}
+        for output, value in outputs.items():
+            self.assertEqual(self.metrics(app)[output], str(value))
+            rows = re.findall(r"<tr[^>]*>(.*?)</tr>", self.table(app, f"{output} truth table"),
+                              flags=re.S)[1:]
+            self.assertEqual([i for i, row in enumerate(rows) if "Active" in row], [minterm])
+            self.assertEqual(re.findall(r"<td>(.*?)</td>", rows[minterm]),
+                             [*(str(bit) for bit in signature), str(value), "Active"])
+        maps = [body for body in self.html(app) if "logic-kmap-display" in body]
+        self.assertEqual(len(maps), 2)
+        for body, output in zip(maps, ("S", "Cout")):
+            self.assertIn(f"data-active-minterm='{minterm}'", body)
+            self.assertIn(f"Selected input: minterm {minterm}, output {outputs[output]}", body)
+        descriptions = [body for body in self.html(app) if "<img " in body][:3]
+        for name, body in zip(("sum", "carry", "full_adder"), descriptions):
+            current = app.session_state[f"adder_svg_{name}"]
+            self.assertEqual(current["signature"], signature)
+            svg = current["data"].decode()
+            for bit, value in zip(self.input_names, signature):
+                self.assertIn(f"{bit}={value}", body)
+                self.assertIn(f"{bit}={value}", svg)
+            for output in (("S",) if name == "sum" else
+                           ("Cout",) if name == "carry" else ("S", "Cout")):
+                self.assertIn(f"{output}={outputs[output]}", body)
+                self.assertIn(f"{output}={outputs[output]}", svg)
+            encoded = re.search(r"base64,([^\"]+)", body).group(1)
+            self.assertEqual(base64.b64decode(encoded), current["data"])
+
     def test_defaults_tables_maps_and_six_current_exports(self):
         app = self.app()
         self.assertEqual(self.metrics(app), {
             "S": "0", "Cout": "1", "Sum (4 bits)": "1000", "Carry C4": "0",
             "Full result (5 bits)": "01000",
         })
-        self.assertEqual([toggle.value for toggle in app.toggle], [True, True, False])
+        self.assert_one_bit_state(app, {"A": True, "B": True, "Cin": False})
+        prose = "\n".join(element.value for kind in ("markdown", "caption", "success", "info")
+                          for element in app.get(kind))
+        self.assertNotIn("S + 2·Cout", prose)
         for name in ("S", "Cout"):
             body = self.table(app, f"{name} truth table")
             rows = re.findall(r"<tr[^>]*>(.*?)</tr>", body, flags=re.S)[1:]
@@ -70,6 +122,46 @@ class AdderLessonUI(unittest.TestCase):
             self.assertIn(f"width:{width * 0.5:.2f}px;max-width:100%;height:auto;", body)
         headings = [header.value for header in app.header]
         self.assertEqual(headings[-1], "5. Simplify with XOR")
+
+    def test_every_switch_copy_updates_all_one_bit_consumers_immediately(self):
+        app = self.app()
+        expected = {"A": True, "B": True, "Cin": False}
+        four_bit_images = {name: dict(app.session_state[f"adder_svg_{name}"])
+                           for name in self.diagram_names[3:]}
+        four_bit_metrics = {label: self.metrics(app)[label]
+                            for label in ("Sum (4 bits)", "Carry C4", "Full result (5 bits)")}
+        for group in self.switch_groups:
+            for bit in self.input_names:
+                with self.subTest(group=group, bit=bit):
+                    expected[bit] = not expected[bit]
+                    app.toggle(key=self.switch_key(group, bit)).set_value(expected[bit]).run()
+                    self.assert_one_bit_state(app, expected)
+                    self.assertEqual(app.text_input(key="adder_operand_a").value, "0101")
+                    self.assertEqual(app.text_input(key="adder_operand_b").value, "0011")
+                    for label, value in four_bit_metrics.items():
+                        self.assertEqual(self.metrics(app)[label], value)
+                    for name, image in four_bit_images.items():
+                        self.assertEqual(app.session_state[f"adder_svg_{name}"], image)
+
+    def test_synced_inputs_survive_reruns_and_widget_cleanup(self):
+        app = AppTest.from_string(
+            "import streamlit as st\n"
+            "from tools.logic_adder_lesson import render\n"
+            "if st.checkbox('Show lesson', value=True, key='show_lesson'):\n"
+            "    render()\n", default_timeout=30,
+        ).run()
+        app.toggle(key=self.switch_key("carry_circuit", "B")).set_value(False).run()
+        app.toggle(key=self.switch_key("full_adder", "Cin")).set_value(True).run()
+        expected = {"A": True, "B": False, "Cin": True}
+        self.assert_one_bit_state(app, expected)
+        app.run()
+        self.assert_one_bit_state(app, expected)
+        app.checkbox(key="show_lesson").set_value(False).run()
+        self.clean(app)
+        self.assertEqual(len(app.toggle), 0)
+        self.assertEqual(app.session_state["adder_one_bit_inputs"], expected)
+        app.checkbox(key="show_lesson").set_value(True).run()
+        self.assert_one_bit_state(app, expected)
 
     def test_zero_output_still_selects_rows_and_maps_and_keeps_operands_independent(self):
         app = self.app()
@@ -129,7 +221,7 @@ class AdderLessonUI(unittest.TestCase):
                     prior_carry = total // 2
                 self.assertEqual(len(rows), 4)
         self.assertEqual(app.session_state["adder_svg_full_adder"]["data"], full_image)
-        self.assertEqual([toggle.value for toggle in app.toggle], [True, True, False])
+        self.assert_one_bit_state(app, {"A": True, "B": True, "Cin": False})
 
     def test_invalid_operands_hide_all_four_bit_results_then_recover(self):
         app = self.app()
@@ -143,7 +235,7 @@ class AdderLessonUI(unittest.TestCase):
                 self.assertFalse(any("Four-bit ripple-carry circuit;" in body for body in self.html(app)))
                 self.assertFalse(any("Four-bit full-adder block overview;" in body for body in self.html(app)))
                 self.assertFalse(any("Simplified four-bit XOR/AND/OR circuit;" in body for body in self.html(app)))
-                self.assertEqual(len(app.toggle), 3)
+                self.assertEqual(len(app.toggle), 15)
         self.set_operands(app, " 0001 ", "\t0010\t")
         self.assertEqual(len(app.error), 0)
         self.assertEqual(self.metrics(app)["Sum (4 bits)"], "0011")

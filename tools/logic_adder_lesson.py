@@ -20,6 +20,44 @@ from .logic_circuit_svg import build_layout, render_circuit_svg, svg_size_px
 from .logic_kmap_sop import build_maps, render_kmap_html
 
 
+_ONE_BIT_GROUPS = ("sum_bit", "sum_circuit", "carry_bit", "carry_circuit", "full_adder")
+_ONE_BIT_DEFAULTS = {"A": True, "B": True, "Cin": False}
+
+
+def _one_bit_key(group, name):
+    return f"adder_input_{name}" if group == "sum_bit" else f"adder_input_{group}_{name}"
+
+
+def _prepare_one_bit_inputs():
+    """Hydrate all widget copies before rendering from persistent shared state."""
+    if "adder_one_bit_inputs" not in st.session_state:
+        st.session_state["adder_one_bit_inputs"] = {
+            name: bool(st.session_state.get(f"adder_input_{name}", initial))
+            for name, initial in _ONE_BIT_DEFAULTS.items()
+        }
+    values = st.session_state["adder_one_bit_inputs"]
+    for group in _ONE_BIT_GROUPS:
+        for name in _ONE_BIT_DEFAULTS:
+            st.session_state[_one_bit_key(group, name)] = values[name]
+    return {name: int(values[name]) for name in _ONE_BIT_DEFAULTS}
+
+
+def _set_one_bit_input(name, key):
+    # Callbacks run before the next render, so earlier diagrams update too.
+    st.session_state["adder_one_bit_inputs"] = {
+        **st.session_state["adder_one_bit_inputs"], name: bool(st.session_state[key]),
+    }
+
+
+def _one_bit_switches(group):
+    with st.container(horizontal=True, key=f"adder_controls_{group}"):
+        for name in _ONE_BIT_DEFAULTS:
+            key = _one_bit_key(group, name)
+            st.toggle(f"{name}={int(st.session_state[key])}", key=key,
+                      help="Off = 0; on = 1. All copies stay synchronized.",
+                      on_change=_set_one_bit_input, args=(name, key))
+
+
 @lru_cache(maxsize=1)
 def _lesson_assets():
     full = build_full_adder()
@@ -91,6 +129,7 @@ def _diagram(name, signature, render_svg, description):
 
 def _function_section(full, result, circuit, layout, values, signature, name, title, explanation):
     st.header(title)
+    _one_bit_switches(f"{name}_bit")
     st.markdown(explanation)
     minterm = signature[0] * 4 + signature[1] * 2 + signature[2]
     output = "S" if name == "sum" else "Cout"
@@ -119,6 +158,7 @@ def _function_section(full, result, circuit, layout, values, signature, name, ti
     local_values = {local: values[global_id] for local, global_id in mapping}
     counts = gate_counts(circuit)
     st.subheader(f"{output} circuit")
+    _one_bit_switches(f"{name}_circuit")
     st.caption(f"{counts['AND']} AND + {counts['OR']} OR + {counts['NOT']} NOT "
                f"= {counts['total']} gates. Each G number matches its product term T.")
     st.metric(output, str(local_values[circuit.output]))
@@ -141,17 +181,13 @@ def render():
                "full height. Download its SVG to enlarge details, especially on a phone.")
     full, four, sum_layout, carry_layout, full_scene, four_scene = _lesson_assets()
 
-    st.subheader("Explore the one-bit inputs")
-    assignment = {}
-    for column, name, initial in zip(st.columns(3), ("A", "B", "Cin"), (True, True, False)):
-        with column:
-            assignment[name] = int(st.toggle(name, value=initial, key=f"adder_input_{name}",
-                                             help="Off = 0; on = 1."))
+    assignment = _prepare_one_bit_inputs()
     signature = tuple(assignment[name] for name in full.network.var_order)
     values = evaluate_network(full.network, assignment)
     stage = full.stages[0]
-    st.caption("These three switches control both truth tables, both K-maps and the first "
-               "three circuits. Cin is the carry arriving from the previous bit. "
+    st.caption("The A, B and Cin switches beside each one-bit section stay synchronized. "
+               "They control both truth tables, both K-maps and the first three circuits. "
+               "Cin is the carry arriving from the previous bit. "
                f"Current minterm: m = 4A + 2B + Cin = {signature[0]*4+signature[1]*2+signature[2]}.")
     st.info("In the Boolean formulas below, + means OR, · means AND and ' means NOT.")
 
@@ -167,13 +203,11 @@ def render():
                       "for minterm 7 belongs to every group: **overlapping groups are allowed**.")
 
     st.header("3. One-bit full adder")
+    _one_bit_switches("full_adder")
     st.markdown("Connect both branches to the **same A, B and Cin inputs**. The separate "
                 "outputs are S and Cout. This SOP construction has **19 gates: 14 for S "
                 "and 5 for Cout**. We preserve these branches to show how the maps become "
                 "a circuit; this is not a claim of the smallest possible gate count.")
-    total = sum(signature)
-    st.success(f"A + B + Cin = {signature[0]} + {signature[1]} + {signature[2]} = {total} "
-               f"= S + 2·Cout = {values[stage.sum_output]} + 2·{values[stage.carry_output]}.")
     _diagram("full_adder", signature, lambda: render_adder_svg(full, full_scene, values),
              f"One-bit full adder; A={signature[0]}, B={signature[1]}, Cin={signature[2]}; "
              f"S={values[stage.sum_output]}, Cout={values[stage.carry_output]}.")
@@ -212,18 +246,22 @@ def render():
                f"Four-bit sum = {int(result.sum_bits, 2)}; full result = {int(result.full_bits, 2)}.")
     st.markdown("**C₄ indicates overflow beyond four unsigned bits.** The main result is "
                 "S₃S₂S₁S₀; prefix it with C₄ to retain the complete five-bit sum.")
-    st.subheader("Follow the carry")
-    _table(("i", "Aᵢ", "Bᵢ", "Cᵢ", "Sᵢ", "Cᵢ₊₁"), result.stages,
-           name="Four-bit carry propagation")
-    st.caption("At every stage: Aᵢ + Bᵢ + Cᵢ = Sᵢ + 2·Cᵢ₊₁. "
-               "Try 1111 + 0001 to follow a carry through all four stages.")
-    st.subheader("Block overview")
-    st.caption("Each box contains one complete full adder. Bit 3 is on the left and bit 0 "
-               "on the right, like the operands you entered. The arrows show carry moving "
-               "right to left, from the fixed C₀ = 0 to the final C₄.")
-    _diagram("four_bit_blocks", (a, b), lambda: render_adder_blocks_svg(four, result.values),
-             f"Four-bit full-adder block overview; A={a}, B={b}; "
-             f"S={result.sum_bits}, C4={result.carry_out}.")
+    with st.container(horizontal=True, key="adder_four_bit_overview"):
+        # Keep the block SVG at its 50% size when both panels fit side by side.
+        with st.container(width=580, key="adder_block_overview"):
+            st.subheader("Block overview")
+            st.caption("Each box contains one complete full adder. Bit 3 is on the left and bit 0 "
+                       "on the right, like the operands you entered. The arrows show carry moving "
+                       "right to left, from the fixed C₀ = 0 to the final C₄.")
+            _diagram("four_bit_blocks", (a, b), lambda: render_adder_blocks_svg(four, result.values),
+                     f"Four-bit full-adder block overview; A={a}, B={b}; "
+                     f"S={result.sum_bits}, C4={result.carry_out}.")
+        with st.container(width=380, key="adder_carry_trace"):
+            st.subheader("Follow the carry")
+            _table(("i", "Aᵢ", "Bᵢ", "Cᵢ", "Sᵢ", "Cᵢ₊₁"), result.stages,
+                   name="Four-bit carry propagation")
+            st.caption("At every stage: Aᵢ + Bᵢ + Cᵢ = Sᵢ + 2·Cᵢ₊₁. "
+                       "Try 1111 + 0001 to follow a carry through all four stages.")
     st.subheader("Complete AND/OR/NOT circuit")
     st.caption("The same four blocks are expanded below, with FA₀ at the top and FA₃ "
                "at the bottom. Carry now travels downward through the same connections.")
