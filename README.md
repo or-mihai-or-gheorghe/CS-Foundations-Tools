@@ -35,7 +35,9 @@ This application provides hands-on, interactive tools for learning low-level com
 - **K-Map Minimizer (BETA)** - Karnaugh map-based Boolean expression minimization (up to 5 variables)
   - Supports multiple expression syntaxes
   - Visual Gray-code ordered K-maps with torus wrapping
-  - Prime implicant selection and SOP minimization
+  - Exact SOP minimization, including don't-cares and five-variable groups
+  - Two-input AND/OR gates, shared NOT gates, and interactive 0/1 simulation
+  - Circuit zoom and standalone SVG export
 
 ### Games Hub (3 games)
 Interactive timed games to practice and master binary operations with competitive leaderboards.
@@ -171,9 +173,15 @@ This application is designed for students and educators studying:
 
 ### K-Map Minimizer
 - Accepts multiple Boolean expression notations
-- Uses prime implicant enumeration with set cover algorithm
-- Renders visual K-maps with colored overlapping groups
-- Supports torus wrapping for edge adjacency
+- Enumerates Boolean cubes and selects an exact SOP cover: fewest terms, then fewest literals
+- Draws colored groups across map edges and separated segments for five variables
+- Builds balanced two-input AND/OR trees with shared unary NOT gates from the selected implicants
+- Uses Schemdraw's SVG backend for circuit diagrams, with input simulation, zoom, and SVG download
+- Preserves the original input domain and distinguishes don't-care rows from the chosen circuit output
+
+Changing the expression or truth-table inputs clears the previous result until **Minimize** is pressed again.
+Simulator inputs and zoom preserve the calculated circuit. A new minimization resets inputs to 0 and zoom to 100%.
+The minimization objective is SOP terms and literals; circuit gate counts describe the resulting realization.
 
 ### IEEE 754 Converter
 - Demonstrates complete conversion process
@@ -289,6 +297,14 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/..."
 ```
 
 **Important:** Never commit the service account JSON or secrets to git! The `.gitignore` already excludes `.streamlit/secrets.toml`.
+
+## Tests
+
+After installing the requirements, run the numeric, logic, SVG, and Streamlit UI regressions with:
+
+```bash
+python -B -m unittest discover -s tests -v
+```
 
 ## Contributing
 

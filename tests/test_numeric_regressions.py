@@ -330,16 +330,18 @@ class NumericUIRegressions(unittest.TestCase):
     def test_kmap_ui_valid_and_invalid(self):
         app = self.app('logic_kmap_sop')
         app.text_input[0].set_value('A AND B')
-        app.button[0].click().run()
+        app.button(key='kmap_minimize_expression').click().run()
         self.assert_clean(app)
         self.assertEqual(len(app.error), 0)
         self.assertIn('A·B', self.displayed(app))
         for expression in ('A AND', 'A + F', 'A#B', '0', '1'):
             app.text_input[0].set_value(expression)
-            app.button[0].click().run()
+            app.button(key='kmap_minimize_expression').click().run()
             self.assert_clean(app)
             self.assertEqual(len(app.error), 1)
-            self.assertNotIn('Minimized SOP', self.displayed(app))
+            self.assertEqual(len(app.success), 0)
+            self.assertEqual(len(app.toggle), 0)
+            self.assertEqual(len(app.get('download_button')), 0)
 
     def test_decimal_ui_default_and_small_context(self):
         for precision in (None, 3):

@@ -7,17 +7,22 @@
 #    AND: . , x , X , AND , * , adjacency (e.g., AB = A AND B)
 #    NOT: ' (prime after symbol or ')', ! , ~ , NOT
 #  - Auto-build truth table from expression
-#  - K-map in Gray order (torus adjacency) with layered translucent groups
-#  - Outputs minimized SOP and grouped implicants
+#  - Exact SOP cover, K-map groups, and two-input logic circuit simulation
 #
-# Display: Streamlit + embedded HTML/CSS (no external libs)
+# Display: Streamlit, HTML/CSS, and Schemdraw SVG
 
 from __future__ import annotations
 import ast
+import base64
+from html import escape
 import re
 import itertools as it
 from typing import List, Tuple, Dict, Set, Optional
 import streamlit as st
+
+from tools.logic_minimization import Cube, cube_segments, minimize_sop, normalize_var_order
+from tools.logic_circuit import build_circuit, evaluate_circuit, gate_counts
+from tools.logic_circuit_svg import build_layout, render_circuit_svg, svg_size_px
 
 # --------------------------- Helpers: Gray code & layout ---------------------------
 
@@ -201,123 +206,7 @@ def build_maps(nvars: int, var_order: List[str]):
         "var_order": var_order[:nvars]
     }
 
-def rect_cells(R, C, r0, c0, h, w):
-    """Cells covered by wrapping rectangle (r0..r0+h-1, c0..c0+w-1) modulo R,C."""
-    for dr in range(h):
-        for dc in range(w):
-            yield ((r0 + dr) % R, (c0 + dc) % C)
-
-def all_power2_sizes(R, C):
-    hs = [1,2,4,8,16,32]
-    ws = [1,2,4,8,16,32]
-    return [ (h,w) for h in hs if h<=R for w in ws if w<=C ]
-
-def enumerate_prime_rects(model, ones: Set[int], dcs: Set[int]) -> List[Set[int]]:
-    """Enumerate maximal (prime) implicant rectangles using ones + don't-cares."""
-    R, C = model["R"], model["C"]
-    cell_to_min = model["cell_to_min"]
-    valid = []
-    # collect all rectangles that contain only 1 or X (and at least one 1)
-    for h,w in sorted(all_power2_sizes(R,C), key=lambda s: s[0]*s[1], reverse=True):
-        seen_sets = set()
-        for r0 in range(R):
-            for c0 in range(C):
-                mins = []
-                has_one = False
-                ok = True
-                for (r,c) in rect_cells(R,C,r0,c0,h,w):
-                    m = cell_to_min[r][c]
-                    mins.append(m)
-                    if m in ones:
-                        has_one = True
-                    elif m in dcs:
-                        pass
-                    else:
-                        ok = False
-                        break
-                if ok and has_one:
-                    s = frozenset(mins)
-                    if s not in seen_sets:
-                        seen_sets.add(s)
-                        valid.append(set(s))
-    # Keep only prime rectangles (not a proper subset of any other)
-    primes: List[Set[int]] = []
-    for s in valid:
-        if not any( (s < t) for t in valid ):  # strict subset test
-            primes.append(s)
-    return primes
-
-def pick_cover(primes: List[Set[int]], ones: Set[int]) -> List[Set[int]]:
-    """Essential primes + greedy set cover for remaining ones."""
-    cover: List[Set[int]] = []
-    uncovered = set(ones)
-    # Essential
-    for m in list(uncovered):
-        candidates = [p for p in primes if m in p]
-        if len(candidates) == 1 and candidates[0] not in cover:
-            cover.append(candidates[0])
-            uncovered -= candidates[0]
-    # Greedy
-    while uncovered:
-        best = max(primes, key=lambda p: len(p & uncovered))
-        if len(best & uncovered) == 0:
-            break
-        cover.append(best)
-        uncovered -= best
-    return cover
-
-def implicant_to_term(minset: Set[int], nvars: int, var_order: List[str]) -> str:
-    """
-    For a set of minterms, find literals that don't change across the set
-    (0 → var', 1 → var). Output product term like A·B'·D.
-    """
-    if not minset:
-        return "1"
-    # Build per-variable bit consistency
-    bits_by_var = [set() for _ in range(nvars)]
-    for m in minset:
-        for i in range(nvars):
-            bit = (m >> (nvars-1-i)) & 1  # MSB var_order[0]
-            bits_by_var[i].add(bit)
-    lits = []
-    for i,var in enumerate(var_order[:nvars]):
-        vals = bits_by_var[i]
-        if vals == {0}:
-            lits.append(f"{var}'")
-        elif vals == {1}:
-            lits.append(f"{var}")
-        else:
-            # eliminates this variable
-            pass
-    if not lits:
-        return "1"
-    return "·".join(lits)
-
 # --------------------------- HTML rendering (layered groups) -----------------------
-
-def _segments_for_wrap(r0,c0,h,w,R,C):
-    """Split a wrapping rectangle into 1/2/4 non-wrapping segments (for drawing)."""
-    r_splits = []
-    if r0 + h <= R:
-        r_splits.append( (r0, h) )
-    else:
-        h1 = R - r0
-        h2 = (r0 + h) % R
-        r_splits.extend( [(r0, h1), (0, h2)] )
-
-    c_splits = []
-    if c0 + w <= C:
-        c_splits.append( (c0, w) )
-    else:
-        w1 = C - c0
-        w2 = (c0 + w) % C
-        c_splits.extend( [(c0, w1), (0, w2)] )
-
-    segs = []
-    for (rs, rh) in r_splits:
-        for (cs, cw) in c_splits:
-            segs.append( (rs, cs, rh, cw) )
-    return segs
 
 PALETTE = [
     "255,99,132","54,162,235","255,206,86","75,192,192","153,102,255",
@@ -325,22 +214,12 @@ PALETTE = [
     "238,130,238","210,105,30","106,90,205","46,139,87","139,69,19",
 ]
 
-def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
+def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...]):
     R, C = model["R"], model["C"]
     rb, cb = model["rb"], model["cb"]
     rows_gray, cols_gray = model["rows_gray"], model["cols_gray"]
     var_order = model["var_order"]
     cell_to_min = model["cell_to_min"]
-
-    def find_rect_for_group(minset: Set[int]) -> Tuple[int,int,int,int]:
-        target = set(minset)
-        for h,w in sorted(all_power2_sizes(R,C), key=lambda s: s[0]*s[1], reverse=True):
-            for r0 in range(R):
-                for c0 in range(C):
-                    cover = {cell_to_min[(r0+dr)%R][(c0+dc)%C] for dr in range(h) for dc in range(w)}
-                    if cover == target:
-                        return (r0,c0,h,w)
-        return (0,0,1,1)
 
     CELL = 44
     GAP  = 4
@@ -363,16 +242,16 @@ def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
     layers = []
     for gi, g in enumerate(groups):
         color = PALETTE[gi % len(PALETTE)]
-        r0,c0,h,w = find_rect_for_group(g)
-        for (rs,cs,rh,cw) in _segments_for_wrap(r0,c0,h,w,R,C):
+        for (rs,cs,rh,cw) in cube_segments(g, cell_to_min):
             left = cs*CELL + cs*GAP
             top  = rs*CELL + rs*GAP
             width  = cw*CELL + (cw-1)*GAP
             height = rh*CELL + (rh-1)*GAP
             layers.append(
-                f"<div class='group' style="
+                f"<div class='group' data-group='{gi+1}' title='Group {gi+1}' style="
                 f"'left:{left}px;top:{top}px;width:{width}px;height:{height}px;"
-                f"background:rgba({color},0.28);border:2px solid rgba({color},0.9);'></div>"
+                f"background:rgba({color},0.20);border:2px solid rgba({color},0.9);'>"
+                f"<span class='group-label'>G{gi+1}</span></div>"
             )
 
     # --- put headers OUTSIDE the grid (reserve space around it) ---
@@ -439,6 +318,8 @@ def render_kmap_html(model, values: Dict[int,str], groups: List[Set[int]]):
       .cell.v0 {{ color:#99a; font-weight:500; }}
       .cell.vx {{ color:#aa6; }}
       .group {{ position:absolute; pointer-events:none; border-radius: 10px; z-index:1; }}
+      .group-label {{ position:absolute; right:1px; top:1px; font:9px monospace;
+                       color:#223; background:#ffffffdd; border-radius:3px; padding:0 1px; }}
       .rowhdr, .colhdr {{
          position:absolute; z-index:3;
          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
@@ -484,129 +365,187 @@ def _parse_minterm_lists(nvars: int, mins_txt: str, dcs_txt: str) -> Tuple[Set[i
         return set(), set(), "A minterm cannot be both 1 and don't care."
     return ones, dcs, None
 
+def _clear_result() -> None:
+    st.session_state.pop("kmap_result", None)
+    for key in list(st.session_state):
+        if key.startswith("kmap_sim_") or key.startswith("kmap_zoom_"):
+            del st.session_state[key]
+
+
+def _store_result(nvars, var_order, ones, dcs, signature, source_label):
+    result = minimize_sop(nvars, ones, dcs, var_order=var_order)
+    circuit = build_circuit(result.cover, result.var_order)
+    layout = build_layout(circuit)
+    _clear_result()
+    generation = st.session_state.get("kmap_generation", 0) + 1
+    st.session_state["kmap_generation"] = generation
+    st.session_state["kmap_result"] = {
+        "minimization": result, "circuit": circuit, "layout": layout,
+        "generation": generation, "signature": signature, "source_label": source_label,
+    }
+    st.session_state["kmap_needs_minimize"] = False
+
+
 def render() -> None:
     st.title("K-Map Minimizer (SOP)")
-
     st.markdown(
-        """
-Minimize a **Sum of Products** using a Karnaugh map (**≤ 5 variables**).
-Choose **Expression** or **Truth Table** input. The K-map is drawn in **Gray order**
-and behaves like a **torus** (groups may wrap around the edges). Overlapping groups
-are shown with translucency and distinct colors.
-        """
+        "Minimize a **Sum of Products** for **1–5 variables**, then explore its "
+        "**AND/OR/NOT circuit**. AND and OR gates each have exactly two inputs."
     )
-
-    mode = st.radio("Input type", ["Expression", "Truth Table"], horizontal=True)
-
+    mode = st.radio("Input type", ["Expression", "Truth Table"], horizontal=True,
+                    key="kmap_input_mode")
     with st.expander("Accepted expression syntax", expanded=False):
         st.markdown(
-            r"""
-- **Variables:** A–E (case-insensitive).  
-- **OR:** `+`, `U`, `V`, `OR`, `|`  
-- **AND:** `.`, `x`, `X`, `AND`, `*`, **adjacency** (e.g., `AB` = `A AND B`)  
-- **NOT:** trailing prime `'` (e.g., `A'`, `(BC)'`), or `!`, `~`, `NOT`  
-- **Spaces** are ignored. Parentheses ok.
+            """
+- **Variables:** A–E (case-insensitive).
+- **OR:** `+`, `U`, `V`, `OR`, `|`
+- **AND:** `.`, `x`, `X`, `AND`, `*`, adjacency (e.g. `AB`)
+- **NOT:** trailing prime `'`, or `!`, `~`, `NOT`
+- Spaces are ignored. Parentheses are supported.
 
-**Examples**
-`A + B·C`,
-`A'B + C(D + E')`,
-`a b' + !c`,
-`(A + B)(C' + D)`
-
+Examples: `A + B·C`, `A'B + C(D + E')`, `a b' + !c`, `(A + B)(C' + D)`.
             """
         )
 
     if mode == "Expression":
-        expr = st.text_input("Boolean expression", EXAMPLES[0])
-        var_order_all = [v for v in VAR_SET]  # default A..E
-        # We auto-detect used vars; you can still force order via this field if needed.
-        if st.button("Minimize (Expression)"):
-            # Normalize & detect used variables
-            try:
-                py_expr, used = _norm_expr(expr)
-                if not used:
-                    st.error("No variables found. Use A..E.")
-                    return
-                if len(used) > 5:
-                    st.error("Use at most 5 variables.")
-                    return
-
-                nvars = len(used)
-                var_order = [v for v in VAR_SET if v in used][:nvars]
-                ones = _eval_expr_to_minterms(expr, var_order)
-            except ValueError as e:
-                st.error(f"Parse error: {e}")
-                return
-            dcs  = set()
-
-            _run_kmap_pipeline(nvars, var_order, ones, dcs, source_label="(from expression)")
-
+        expr = st.text_input("Boolean expression", EXAMPLES[0], key="kmap_expression")
+        signature = (mode, expr)
+        minimize = st.button("Minimize (Expression)", key="kmap_minimize_expression")
     else:
         col1, col2 = st.columns(2)
         with col1:
-            nvars = st.selectbox("Number of variables", [1,2,3,4,5], index=3)
+            nvars = st.selectbox("Number of variables", [1, 2, 3, 4, 5], index=3,
+                                key="kmap_nvars")
         with col2:
-            var_order_str = st.text_input("Variable order (MSB→LSB, subset of A..E)", "ABCDE")
-        var_order = [ch for ch in var_order_str if ch.upper() in VAR_SET][:nvars]
-        if len(var_order) != nvars:
-            var_order = VAR_SET[:nvars]
+            order_text = st.text_input("Variable order (first n letters, MSB→LSB)",
+                                       "ABCDE", key="kmap_variable_order")
+        st.caption("Use distinct A–E variables. Minterms are base-10 indices in this order.")
+        col1, col2 = st.columns(2)
+        with col1:
+            mt = st.text_area("Minterms = 1 (indices, comma/space separated)",
+                              "1,3,7,11,15", key="kmap_minterms")
+        with col2:
+            dc = st.text_area("Don't-cares (optional)", "", key="kmap_dont_cares")
+        signature = (mode, nvars, order_text, mt, dc)
+        minimize = st.button("Minimize (Truth Table)", key="kmap_minimize_truth_table")
 
-        st.caption("Truth table via minterm indices (base-10). Use X or don't-care by listing indices below.")
-        c1, c2 = st.columns(2)
-        with c1:
-            mt = st.text_area("Minterms = 1 (indices, comma/space separated)", "1,3,7,11,15")
-        with c2:
-            dc = st.text_area("Don't-cares (optional)", "")
+    previous_signature = st.session_state.get("kmap_source_signature")
+    if previous_signature != signature:
+        _clear_result()
+        st.session_state["kmap_source_signature"] = signature
+        st.session_state["kmap_needs_minimize"] = previous_signature is not None
 
-        if st.button("Minimize (Truth Table)"):
-            ones, dcs, err = _parse_minterm_lists(nvars, mt, dc)
-            if err:
-                st.error(err); return
-            _run_kmap_pipeline(nvars, var_order, ones, dcs, source_label="(from minterms)")
+    if minimize:
+        _clear_result()
+        try:
+            if mode == "Expression":
+                _, used = _norm_expr(expr)
+                if not used:
+                    raise ValueError("No variables found. Use A..E.")
+                nvars = len(used)
+                var_order = tuple(used)
+                ones = _eval_expr_to_minterms(expr, list(var_order))
+                dcs = set()
+                source_label = "(from expression)"
+            else:
+                var_order = normalize_var_order(nvars, order_text)
+                ones, dcs, err = _parse_minterm_lists(nvars, mt, dc)
+                if err:
+                    raise ValueError(err)
+                source_label = "(from minterms)"
+        except ValueError as exc:
+            st.error(f"Input error: {exc}")
+            return
+        with st.spinner("Minimizing and drawing the circuit…"):
+            _store_result(nvars, var_order, ones, dcs, signature, source_label)
 
-def _run_kmap_pipeline(nvars: int, var_order: List[str], ones: Set[int], dcs: Set[int], source_label: str):
-    model = build_maps(nvars, var_order)
+    snapshot = st.session_state.get("kmap_result")
+    if snapshot is not None:
+        _render_result(snapshot)
+    elif st.session_state.get("kmap_needs_minimize"):
+        st.caption("Inputs changed. Select Minimize to calculate a new result.")
 
-    # Value map by minterm index
-    values: Dict[int,str] = {m:"0" for m in range(1<<nvars)}
-    for m in ones: values[m] = "1"
-    for m in dcs:
-        if values[m] != "1":
-            values[m] = "X"
 
-    # Prime implicants and cover
-    primes = enumerate_prime_rects(model, ones, dcs)
-    cover  = pick_cover(primes, ones)
-
-    # Produce SOP
-    terms = [implicant_to_term(g, nvars, var_order) for g in cover]
-    sop = " + ".join(t for t in terms) if terms else "0"
+def _render_result(snapshot):
+    result = snapshot["minimization"]
+    model = build_maps(result.nvars, list(result.var_order))
+    values = {m: "1" if m in result.ones else "X" if m in result.dont_cares else "0"
+              for m in range(1 << result.nvars)}
 
     st.subheader("Minimized SOP")
-    st.success(f"`F({','.join(var_order)}) = {sop}`  {source_label}")
-
-    # List implicants
+    st.success(f"`F({','.join(result.var_order)}) = {result.sop}`  {snapshot['source_label']}")
+    st.caption("Minimum number of SOP terms, then minimum literal count. "
+               "This circuit implements that SOP using two-input AND/OR gates.")
     st.subheader("Selected implicants")
-    for i, (g, t) in enumerate(zip(cover, terms), start=1):
-        st.markdown(f"- **Group {i}**: covers minterms `{sorted(g)}` → term **{t}**")
+    for index, (cube, term) in enumerate(zip(result.cover, result.terms), 1):
+        st.markdown(f"- **Group {index} / T{index}**: minterms "
+                    f"`{sorted(cube.covered_minterms)}` → **{term}**")
+    if not result.cover:
+        st.caption("No product terms are needed: F = 0.")
 
-    # K-map HTML
     st.subheader("K-map (Karnaugh)")
-    html = render_kmap_html(model, values, cover)
+    html = render_kmap_html(model, values, result.cover)
+    height = model["R"] * 44 + (model["R"] - 1) * 4 + 68
+    st.components.v1.html(html, height=height, scrolling=True)
+    st.caption("G labels identify logical groups, including segments across map edges. "
+               "For five variables, one group may occupy separated segments. "
+               "X cells can enlarge a group but do not need to be covered.")
+    _render_circuit(snapshot)
 
-    # increase iframe height to include the extra top gutter for column labels
-    CELL, GAP = 44, 4
-    PAD_T = 48 if model["cb"] > 0 else 0
-    iframe_h = model["R"]*CELL + (model["R"]-1)*GAP + PAD_T + 20
-    st.components.v1.html(html, height=iframe_h)
 
+def _render_circuit(snapshot):
+    circuit = snapshot["circuit"]
+    result = snapshot["minimization"]
+    generation = snapshot["generation"]
+    st.subheader("Logic circuit")
+    counts = gate_counts(circuit)
+    st.caption(f"AND: {counts['AND']} · OR: {counts['OR']} · NOT: {counts['NOT']} "
+               f"· Total: {counts['total']}. AND/OR: 2 inputs; NOT: 1 input.")
 
-    # Small help
-    st.markdown(
-        """
-- **Gray order** on rows/columns ensures every neighbor differs by one bit.
-- The map is a **torus**: left↔right and top↔bottom wrap. Groups may span edges.
-- Don’t-cares (`X`) can be absorbed to make groups larger, but they don’t need to be covered.
-- Result uses **SOP** with `'` for negation and `·` for AND; `+` means OR.
-        """
-    )
+    used_signals = {signal for node in circuit.nodes for signal in node.inputs}
+    if circuit.output:
+        used_signals.add(circuit.output)
+    used_variables = {node.variable for node in circuit.nodes
+                      if node.kind == "INPUT" and node.id in used_signals}
+    assignment = {}
+    for column, variable in zip(st.columns(len(circuit.var_order)), circuit.var_order):
+        with column:
+            label = variable if variable in used_variables else f"{variable} (unused)"
+            assignment[variable] = int(st.toggle(label, value=False,
+                key=f"kmap_sim_{generation}_{variable}", help="Off = 0; on = 1."))
+    zoom = st.slider("Circuit zoom (%)", 25, 200, 100, step=25,
+                     key=f"kmap_zoom_{generation}")
+
+    signals = evaluate_circuit(circuit, assignment)
+    st.metric("F", str(signals[circuit.output]))
+    bits = tuple(assignment[var] for var in circuit.var_order)
+    minterm = bitstr_to_int(list(bits))
+    inputs_text = ", ".join(f"{var}={assignment[var]}" for var in circuit.var_order)
+    expected = "X (don't-care)" if minterm in result.dont_cares else str(int(minterm in result.ones))
+    st.caption(f"Inputs: {inputs_text} · Minterm: {minterm} · Specified output: {expected}")
+    if minterm in result.dont_cares:
+        st.caption("This input is unspecified. The chosen circuit produces the concrete F value shown above.")
+
+    if snapshot.get("svg_assignment") != bits:
+        snapshot["svg_bytes"] = render_circuit_svg(circuit, snapshot["layout"], signals)
+        snapshot["svg_assignment"] = bits
+    svg_bytes = snapshot["svg_bytes"]
+    width, height = svg_size_px(svg_bytes)
+    image_data = base64.b64encode(svg_bytes).decode("ascii")
+    description = escape(f"AND/OR/NOT circuit for F = {result.sop}. {inputs_text}; F={signals[circuit.output]}.")
+    # Reserve both image dimensions so asynchronous SVG decoding cannot collapse
+    # the scroll area. The native container survives HTML updates.
+    # SVG is an image because st.html's HTML-only sanitizer removes inline svg.
+    with st.container(height=min(480, max(180, int(height + 28))),
+                      key=f"kmap_circuit_{generation}"):
+        st.html(
+            f'<div role="region" aria-label="Logic circuit diagram" tabindex="0">'
+            f'<img alt="{description}" src="data:image/svg+xml;base64,{image_data}" '
+            f'style="display:block;width:{width * zoom / 100:.2f}px;'
+            f'height:{height * zoom / 100:.2f}px;max-width:none;" />'
+            '</div>'
+        )
+    st.caption("Wire values: 0 = gray, 1 = blue. Dots mark connections; crossings without dots are separate wires. "
+               "Use the scroll area to explore larger circuits.")
+    st.download_button("Download SVG", data=svg_bytes, file_name="kmap_circuit.svg",
+                       mime="image/svg+xml", key="kmap_download_svg")
