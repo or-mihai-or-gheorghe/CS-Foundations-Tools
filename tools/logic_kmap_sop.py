@@ -249,9 +249,12 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...], *,
             )
 
     layers = []
+    group_labels = []
+    occupied_labels = set()
     for gi, g in enumerate(groups):
         color = PALETTE[gi % len(PALETTE)]
-        for (rs,cs,rh,cw) in cube_segments(g, cell_to_min):
+        segments = cube_segments(g, cell_to_min)
+        for si, (rs,cs,rh,cw) in enumerate(segments):
             left = cs*CELL + cs*GAP
             top  = rs*CELL + rs*GAP
             width  = cw*CELL + (cw-1)*GAP
@@ -259,8 +262,24 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...], *,
             layers.append(
                 f"<div class='group' data-group='{gi+1}' title='Group {gi+1}' style="
                 f"'left:{left}px;top:{top}px;width:{width}px;height:{height}px;"
-                f"background:rgba({color},0.20);border:2px solid rgba({color},0.9);'>"
-                f"<span class='group-label'>G{gi+1}</span></div>"
+                f"background:rgba({color},0.20);border:2px solid rgba({color},0.9);'></div>"
+            )
+            # Give each segment a readable badge inside one of its cells.
+            # Separate badges from the colored layers so later groups cannot
+            # cover an earlier group's identifier at a shared corner.
+            cells = [(r, c) for r in range(rs, rs + rh)
+                     for c in reversed(range(cs, cs + cw))]
+            slots = [(r, c, corner) for corner in range(3) for r, c in cells]
+            r, c, corner = next(slot for slot in slots if slot not in occupied_labels)
+            occupied_labels.add((r, c, corner))
+            label_left = c * (CELL + GAP) + (1 if corner == 2 else CELL - 21)
+            label_top = r * (CELL + GAP) + (1 if corner == 0 else CELL - 11)
+            part = sorted(cell_to_min[r][c] for r, c in cells)
+            description = f"Group {gi+1}, part {si+1} of {len(segments)}: minterms {part}"
+            group_labels.append(
+                f"<span class='group-label' data-group='{gi+1}' data-segment='{si+1}' "
+                f"title='{escape(description, quote=True)}' "
+                f"style='left:{label_left}px;top:{label_top}px;'>G{gi+1}</span>"
             )
 
     if active_minterm is not None:
@@ -311,6 +330,7 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...], *,
       <div class="kmap" style="width:{W}px;height:{H}px;">
         {''.join(cells_html)}
         {''.join(layers)}
+        {''.join(group_labels)}
       </div>
       {''.join(row_hdrs)}
       {''.join(col_hdrs)}
@@ -345,8 +365,9 @@ def render_kmap_html(model, values: Dict[int,str], groups: Tuple[Cube, ...], *,
       .logic-kmap-display .cell.v0 {{ color:#99a; font-weight:500; }}
       .logic-kmap-display .cell.vx {{ color:#aa6; }}
       .logic-kmap-display .group {{ position:absolute; pointer-events:none; border-radius: 10px; z-index:1; }}
-      .logic-kmap-display .group-label {{ position:absolute; right:1px; top:1px; font:9px monospace;
-                       color:#223; background:#ffffffdd; border-radius:3px; padding:0 1px; }}
+      .logic-kmap-display .group-label {{ position:absolute; z-index:3; width:20px; height:10px;
+                       box-sizing:border-box; text-align:center; font:9px/10px monospace;
+                       color:#223; background:#ffffffee; border-radius:3px; padding:0 1px; }}
       .logic-kmap-display .active-cell {{ position:absolute; z-index:2; pointer-events:none;
                       border:2px dashed #17212b; border-radius:4px; box-sizing:border-box; }}
       .logic-kmap-display .rowhdr, .logic-kmap-display .colhdr {{
@@ -510,6 +531,13 @@ def _render_result(snapshot):
     for index, (cube, term) in enumerate(zip(result.cover, result.terms), 1):
         st.markdown(f"- **Group {index} / T{index}**: minterms "
                     f"`{sorted(cube.covered_minterms)}` → **{term}**")
+        segments = cube_segments(cube, model["cell_to_min"])
+        if len(segments) > 1:
+            parts = [sorted(model["cell_to_min"][r][c]
+                            for r in range(rs, rs + rh) for c in range(cs, cs + cw))
+                     for rs, cs, rh, cw in segments]
+            st.caption(f"G{index} is one group drawn in {len(parts)} parts: "
+                       + " and ".join(str(part) for part in parts) + ".")
     if not result.cover:
         st.caption("No product terms are needed: F = 0.")
 
@@ -517,8 +545,8 @@ def _render_result(snapshot):
     html = render_kmap_html(model, values, result.cover)
     height = model["R"] * 44 + (model["R"] - 1) * 4 + 68
     st.iframe(html, height=height)
-    st.caption("G labels identify logical groups, including segments across map edges. "
-               "For five variables, one group may occupy separated segments. "
+    st.caption("Parts with the same G number belong to one logical group, including across map edges. "
+               "For five variables, cells that differ in one variable can be separated visually. "
                "X cells can enlarge a group but do not need to be covered.")
     _render_circuit(snapshot)
 
