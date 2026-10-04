@@ -1,7 +1,7 @@
 # pages/1_🎮_Games_Hub.py
 
 import streamlit as st
-from tools.games import binary_speed_challenge, speed_binary_addition, speed_hex_conversion
+from tools.games import binary_speed_challenge, speed_binary_addition, speed_hex_conversion, information_quiz
 from components.streamlit_auth import render_auth_ui, render_auth_status_badge
 from components.leaderboard import render_leaderboard
 from components.game_stats import render_game_stats, render_per_game_stats
@@ -32,6 +32,14 @@ AVAILABLE_GAMES = {
         "difficulty": "Easy to Expert",
         "duration": "60 seconds",
         "skills": ["Hex Conversion", "Binary", "Speed"]
+    },
+    information_quiz.GAME_DISPLAY_NAME: {
+        "module": information_quiz,
+        "description": "Întrebări rapide despre informație, entropie, unități de măsură, canale și codare. Seriile de răspunsuri corecte aduc multiplicator, iar greșelile costă puncte.",
+        "emoji": "🧠",
+        "difficulty": "Nivel unic",
+        "duration": "60 de secunde",
+        "skills": ["Teoria informației", "Unități de măsură", "Raționament rapid"]
     }
 }
 
@@ -86,6 +94,9 @@ def render_game_card(game_name: str, game_info: dict):
             st.markdown(f"**📊 Difficulty:** {game_info['difficulty']}")
             st.markdown(f"**🎯 Skills:** {', '.join(game_info['skills'])}")
 
+        # A game can be locked, e.g. reserved for signed-in players
+        unavailable = getattr(game_info['module'], 'unavailable_reason', lambda: None)()
+
         with col2:
             st.markdown("")  # Spacing
             st.markdown("")  # Spacing
@@ -93,10 +104,13 @@ def render_game_card(game_name: str, game_info: dict):
                 "▶ Play",
                 key=f"play_{game_name}",
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                disabled=unavailable is not None
             ):
                 select_game(game_name)
                 st.rerun()
+            if unavailable:
+                st.caption(unavailable)
 
 def render_landing_page():
     """Render games landing page with all available games"""
@@ -146,6 +160,8 @@ def render_game_screen(game_name: str):
                 st.session_state.addition_game['active'] = False
             if 'hex_game' in st.session_state:
                 st.session_state.hex_game['active'] = False
+            # Leaving the quiz abandons the round instead of saving it on the next visit
+            st.session_state.pop('quiz_game', None)
             return_to_landing()
             st.rerun()
 

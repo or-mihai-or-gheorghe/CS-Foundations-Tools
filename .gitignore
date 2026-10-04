@@ -32,3 +32,6 @@ FIREBASE_IMPLEMENTATION_PLAN.md
 *serviceAccountKey*.json
 *firebase-adminsdk*.json
 firebase-credentials.json
+
+# Quiz question bank (answers stay out of the public repo)
+/data/quiz_*.csv

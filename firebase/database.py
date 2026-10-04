@@ -279,8 +279,8 @@ def _update_leaderboard_mock(user_uid: str, game_slug: str, game_result: Dict) -
         entry["email"] = user_data.get("email", "")
         entry["display_name"] = user_data.get("display_name", "Unknown")
 
-        # Update difficulty-specific
-        mock_db["leaderboard"][game_slug]["by_difficulty"][difficulty][user_uid] = entry.copy()
+        # Update difficulty-specific (levels differ between games)
+        mock_db["leaderboard"][game_slug]["by_difficulty"].setdefault(difficulty, {})[user_uid] = entry.copy()
 
         # Update global
         if "global" not in mock_db["leaderboard"]:

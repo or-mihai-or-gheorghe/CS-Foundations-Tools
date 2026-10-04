@@ -16,8 +16,12 @@ logger = logging.getLogger(__name__)
 AVAILABLE_GAMES = {
     "binary_speed_challenge": "Binary Speed Challenge",
     "speed_binary_addition": "Speed Binary Addition",
-    "speed_hex_conversion": "Speed Hex Conversion"
+    "speed_hex_conversion": "Speed Hex Conversion",
+    "information_quiz": "Test grilă: Informația"
 }
+
+# Games with a single difficulty level get no difficulty filter
+SINGLE_LEVEL_GAMES = {"information_quiz"}
 
 
 def obfuscate_email(email: str, current_user_email: Optional[str] = None) -> str:
@@ -127,7 +131,7 @@ def _render_filters(default_game_slug: Optional[str] = None) -> Dict:
     with col2:
         # Difficulty filter (only for specific games)
         difficulty = None
-        if game_slug:
+        if game_slug and game_slug not in SINGLE_LEVEL_GAMES:
             difficulty = st.selectbox(
                 "Difficulty",
                 options=["All", "Easy", "Medium", "Hard", "Expert"],

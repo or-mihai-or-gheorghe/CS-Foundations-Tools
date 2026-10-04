@@ -47,7 +47,7 @@ This application provides hands-on, interactive tools for learning low-level com
   - Block overview showing carry propagation from bit 0 to bit 3
   - Equivalent 20-gate XOR/AND/OR circuit, synchronized with the same operands
 
-### Games Hub (3 games)
+### Games Hub (4 games)
 Interactive timed games to practice and master binary operations with competitive leaderboards.
 
 - **Binary Speed Challenge** - Convert binary and decimal numbers at lightning speed
@@ -66,6 +66,11 @@ Interactive timed games to practice and master binary operations with competitiv
   - Three difficulty levels (Easy, Advanced, Expert)
   - Case-insensitive input for user convenience
   - Direct input or multiple choice modes
+
+- **Test grilă: Informația** - Fast multiple-choice quiz, in Romanian, on information theory
+  - Only for users signed in with an @ase.ro account
+  - Streak multipliers, speed bonuses and a penalty for wrong answers
+  - Question bank kept out of the repository: `data/quiz_informatia.csv` locally, or the `[quiz] csv` secret on Streamlit Cloud
 
 **Leaderboard & Statistics:**
 - Sign in with @ase.ro Google account to save scores
