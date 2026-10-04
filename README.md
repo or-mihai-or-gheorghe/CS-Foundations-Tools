@@ -70,7 +70,7 @@ Interactive timed games to practice and master binary operations with competitiv
 **🎓 Teste BTI** - course consolidation tests for ASE students, in a separate tab with their own leaderboard
 (they do not count in the games' global ranking):
 
-- **Test grilă: Informația** - Fast multiple-choice quiz, in Romanian, on information theory
+- **Informația** - Fast multiple-choice quiz, in Romanian, on information theory
   - Only for users signed in with an @ase.ro account
   - Streak multipliers, speed bonuses and a penalty for wrong answers
   - Question bank kept out of the repository: edited in `data/quiz_informatia.csv` (gitignored), checked with

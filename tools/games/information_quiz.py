@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Game identification constants
 GAME_SLUG = "information_quiz"
-GAME_DISPLAY_NAME = "Test grilă: Informația"
+GAME_DISPLAY_NAME = "Informația"
 
 # The question bank stays out of the public repository: the author keeps it in a local CSV and
 # uploads it to Firebase with upload_quiz_bank.py; the deployed app reads it from there
