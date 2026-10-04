@@ -198,6 +198,11 @@ def update_leaderboard(user_uid: str, game_slug: str, game_result: Dict) -> bool
         diff_ref = get_database_reference(f"leaderboard/{game_slug}/by_difficulty/{difficulty}/{user_uid}")
         diff_ref.set(leaderboard_entry)
 
+        # Course tests have their own leaderboard and stay out of the games' global ranking
+        if not game_result.get("counts_in_global", True):
+            logger.info(f"Updated leaderboard for {user_uid} in {game_slug}")
+            return True
+
         # Update global leaderboard (reuse user_data from above)
         global_ref = get_database_reference(f"leaderboard/global/all_time/{user_uid}")
         global_data = global_ref.get() or {}
@@ -281,6 +286,10 @@ def _update_leaderboard_mock(user_uid: str, game_slug: str, game_result: Dict) -
 
         # Update difficulty-specific (levels differ between games)
         mock_db["leaderboard"][game_slug]["by_difficulty"].setdefault(difficulty, {})[user_uid] = entry.copy()
+
+        # Course tests have their own leaderboard and stay out of the games' global ranking
+        if not game_result.get("counts_in_global", True):
+            return True
 
         # Update global
         if "global" not in mock_db["leaderboard"]:

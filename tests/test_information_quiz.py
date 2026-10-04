@@ -153,7 +153,7 @@ class QuizUI(unittest.TestCase):
 
     def run_as(self, user, app=None):
         with mock.patch.object(quiz, "_signed_in_user", return_value=user):
-            app = (app or AppTest.from_string(SCRIPT, default_timeout=30)).run()
+            app = (AppTest.from_string(SCRIPT, default_timeout=30) if app is None else app).run()
         self.assertEqual([e.message for e in app.exception], [])
         return app
 
@@ -200,6 +200,7 @@ class QuizUI(unittest.TestCase):
         self.assertEqual((data["results"]["score"], data["results"]["total_count"], data["results"]["skipped_count"]),
                          (15, 3, 1))
         self.assertEqual([h["outcome"] for h in data["history"]], ["correct", "wrong", "skipped"])
+        self.assertIs(data["counts_in_global"], False)
 
         self.run_as(STUDENT, app)  # reruns of the results screen do not save again
         self.save.assert_called_once()
@@ -234,19 +235,53 @@ class QuizUI(unittest.TestCase):
 
 
 @unittest.skipUnless(importlib.util.find_spec("firebase_admin"), "firebase-admin is not installed")
-class GamesHubCard(unittest.TestCase):
-    def test_quiz_card_is_locked_for_anonymous_players(self):
-        app = AppTest.from_file("pages/games_hub.py", default_timeout=30)
+class GamesHubBtiTab(unittest.TestCase):
+    QUIZ_KEY = f"play_{quiz.GAME_DISPLAY_NAME}"
+
+    def run_hub(self, app=None, click=None):
+        if app is None:
+            app = AppTest.from_file("pages/games_hub.py", default_timeout=30)
         app.secrets["firebase"] = {"use_mock_auth": True}
         # AppTest has no st.user without [auth] secrets, so the hub's sign-in bar is stubbed
         with mock.patch("components.streamlit_auth.render_auth_ui"), \
+                mock.patch("components.streamlit_auth.render_auth_status_badge"), \
                 mock.patch.object(quiz, "_signed_in_user", return_value=None):
-            app.run()
+            app.button(key=click).click().run() if click else app.run()
         self.assertEqual([e.message for e in app.exception], [])
-        play = app.button(key=f"play_{quiz.GAME_DISPLAY_NAME}")
-        self.assertTrue(play.disabled)
-        self.assertFalse(app.button(key="play_Binary Speed Challenge").disabled)
-        self.assertTrue(any("@ase.ro" in c.value for c in app.caption))
+        return app
+
+    def test_quiz_is_in_the_bti_tab_locked_for_anonymous_players(self):
+        app = self.run_hub()
+        games, bti = app.tabs[0], app.tabs[1]
+        self.assertEqual([t.label for t in app.tabs], ["🎮 Games", "🎓 Teste BTI", "🏆 Leaderboard", "📊 Stats"])
+        self.assertEqual(len([b for b in games.button if b.key.startswith("play_")]), 3)
+        self.assertNotIn(self.QUIZ_KEY, [b.key for b in games.button])
+        self.assertTrue(bti.button(key=self.QUIZ_KEY).disabled)
+        self.assertTrue(any("@ase.ro" in c.value for c in bti.caption))
+        self.assertTrue(any("Clasament" in m.value for m in bti.markdown))
+
+    def test_back_from_a_bti_test_returns_to_the_bti_tab(self):
+        app = AppTest.from_file("pages/games_hub.py", default_timeout=30)
+        app.session_state["games_hub"] = {"selected_game": quiz.GAME_DISPLAY_NAME, "show_landing": False,
+                                          "return_tab": None}
+        self.run_hub(app)
+        self.run_hub(app, click="back_to_games")
+        self.assertEqual(app.session_state["games_hub"]["return_tab"], "🎓 Teste BTI")
+        self.assertNotIn("quiz_game", app.session_state)
+
+    def test_bti_results_stay_out_of_the_global_ranking(self):
+        from firebase import database
+
+        result = {"results": {"score": 50, "correct_count": 2, "total_count": 3, "best_streak": 2},
+                  "settings": {"difficulty": "Standard"}}
+        for counts_in_global in (False, True):
+            db = {"leaderboard": {"global": {"all_time": {}}}}
+            data = {**result, **({} if counts_in_global else {"counts_in_global": False})}
+            with mock.patch.object(database, "get_mock_database", return_value=db), \
+                    mock.patch("firebase.auth.get_current_user", return_value=STUDENT):
+                self.assertTrue(database._update_leaderboard_mock("u1", quiz.GAME_SLUG, data))
+            self.assertEqual(db["leaderboard"][quiz.GAME_SLUG]["all_time"]["u1"]["total_score"], 50)
+            self.assertEqual("u1" in db["leaderboard"]["global"]["all_time"], counts_in_global)
 
 
 if __name__ == "__main__":

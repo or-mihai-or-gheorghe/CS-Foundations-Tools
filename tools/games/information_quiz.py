@@ -415,6 +415,7 @@ def _save_result(game: Dict, user: Dict, accuracy: float, avg_time: float) -> No
     game_data = {
         "game_slug": GAME_SLUG,
         "game_type": GAME_DISPLAY_NAME,
+        "counts_in_global": False,  # BTI tests have their own leaderboard, apart from the games' ranking
         "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "user_email": user.get("email", ""),
         "user_display_name": user.get("display_name", ""),

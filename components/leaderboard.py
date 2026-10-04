@@ -16,12 +16,8 @@ logger = logging.getLogger(__name__)
 AVAILABLE_GAMES = {
     "binary_speed_challenge": "Binary Speed Challenge",
     "speed_binary_addition": "Speed Binary Addition",
-    "speed_hex_conversion": "Speed Hex Conversion",
-    "information_quiz": "Test grilă: Informația"
+    "speed_hex_conversion": "Speed Hex Conversion"
 }
-
-# Games with a single difficulty level get no difficulty filter
-SINGLE_LEVEL_GAMES = {"information_quiz"}
 
 
 def obfuscate_email(email: str, current_user_email: Optional[str] = None) -> str:
@@ -100,6 +96,41 @@ def render_leaderboard(game_slug: Optional[str] = None):
         st.error(f"Failed to load leaderboard: {str(e)}")
 
 
+def render_test_leaderboard(tests: Dict[str, str]):
+    """
+    Render the leaderboard of the course tests, separate from the games
+
+    Args:
+        tests: Test slug -> display name
+    """
+    st.markdown("### 🏆 Clasament")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        test_slug = st.selectbox("Test", options=list(tests), format_func=lambda slug: tests[slug],
+                                 key="test_leaderboard_test")
+    with col2:
+        user_search = st.text_input("Caută", placeholder="nume sau email", key="test_leaderboard_search")
+
+    current_user = get_current_user()
+    current_uid = current_user.get('uid') if current_user else None
+    current_email = current_user.get('email') if current_user else None
+
+    try:
+        leaderboard_data = get_leaderboard(game_slug=test_slug, filters={'user_search': user_search}, limit=50)
+
+        if not leaderboard_data:
+            st.info("📊 Încă nu există rezultate. Fii primul!")
+            return
+
+        for entry in leaderboard_data:
+            _render_leaderboard_entry(entry, entry.get('uid') == current_uid, current_email, game_specific=True)
+
+    except Exception as e:
+        logger.error(f"Error rendering test leaderboard: {e}")
+        st.error(f"Clasamentul nu a putut fi încărcat: {str(e)}")
+
+
 def _render_filters(default_game_slug: Optional[str] = None) -> Dict:
     """
     Render filter controls
@@ -131,7 +162,7 @@ def _render_filters(default_game_slug: Optional[str] = None) -> Dict:
     with col2:
         # Difficulty filter (only for specific games)
         difficulty = None
-        if game_slug and game_slug not in SINGLE_LEVEL_GAMES:
+        if game_slug:
             difficulty = st.selectbox(
                 "Difficulty",
                 options=["All", "Easy", "Medium", "Hard", "Expert"],

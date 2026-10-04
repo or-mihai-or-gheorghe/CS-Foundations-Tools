@@ -3,7 +3,7 @@
 import streamlit as st
 from tools.games import binary_speed_challenge, speed_binary_addition, speed_hex_conversion, information_quiz
 from components.streamlit_auth import render_auth_ui, render_auth_status_badge
-from components.leaderboard import render_leaderboard
+from components.leaderboard import render_leaderboard, render_test_leaderboard
 from components.game_stats import render_game_stats, render_per_game_stats
 
 # ========================= Games Registry =========================
@@ -32,7 +32,12 @@ AVAILABLE_GAMES = {
         "difficulty": "Easy to Expert",
         "duration": "60 seconds",
         "skills": ["Hex Conversion", "Binary", "Speed"]
-    },
+    }
+}
+
+# Course consolidation tests for ASE students (BTI course), grouped in their own tab with their own leaderboard
+BTI_TAB = "🎓 Teste BTI"
+BTI_TESTS = {
     information_quiz.GAME_DISPLAY_NAME: {
         "module": information_quiz,
         "description": "Întrebări rapide despre informație, entropie, unități de măsură, canale și codare. Seriile de răspunsuri corecte aduc multiplicator, iar greșelile costă puncte.",
@@ -43,6 +48,8 @@ AVAILABLE_GAMES = {
     }
 }
 
+ALL_GAMES = {**AVAILABLE_GAMES, **BTI_TESTS}
+
 # ========================= State Management =========================
 
 def init_games_hub_state():
@@ -51,7 +58,7 @@ def init_games_hub_state():
         st.session_state.games_hub = {
             'selected_game': None,
             'show_landing': True,
-            'active_tab': 'games'  # 'games' or 'leaderboard'
+            'return_tab': None  # tab to open when coming back from a game (None = first tab)
         }
 
 def select_game(game_name: str):
@@ -60,7 +67,9 @@ def select_game(game_name: str):
     st.session_state.games_hub['show_landing'] = False
 
 def return_to_landing():
-    """Return to games landing page"""
+    """Return to games landing page, on the tab the game came from"""
+    hub = st.session_state.games_hub
+    hub['return_tab'] = BTI_TAB if hub['selected_game'] in BTI_TESTS else None
     st.session_state.games_hub['selected_game'] = None
     st.session_state.games_hub['show_landing'] = True
 
@@ -124,7 +133,8 @@ def render_landing_page():
     st.caption("Test your CS skills with interactive games. Compete and climb the leaderboard!")
 
     # Tab selection
-    tab1, tab2, tab3 = st.tabs(["🎮 Games", "🏆 Leaderboard", "📊 Stats"])
+    tab1, tab_bti, tab2, tab3 = st.tabs(["🎮 Games", BTI_TAB, "🏆 Leaderboard", "📊 Stats"],
+                                        default=st.session_state.games_hub.get('return_tab'))
 
     with tab1:
         st.subheader(f"🎯 Available Games ({len(AVAILABLE_GAMES)})")
@@ -132,6 +142,15 @@ def render_landing_page():
         # Render each game card
         for game_name, game_info in AVAILABLE_GAMES.items():
             render_game_card(game_name, game_info)
+
+    with tab_bti:
+        st.subheader("📘 Teste pentru consolidarea cursului BTI")
+        st.caption("Pentru studenții ASE, autentificați cu contul @ase.ro. Testele au un clasament separat de cel al jocurilor.")
+
+        for test_name, test_info in BTI_TESTS.items():
+            render_game_card(test_name, test_info)
+
+        render_test_leaderboard({info['module'].GAME_SLUG: name for name, info in BTI_TESTS.items()})
 
     with tab2:
         # Render leaderboard
@@ -146,7 +165,7 @@ def render_landing_page():
 def render_game_screen(game_name: str):
     """Render the selected game with a back button"""
 
-    game_info = AVAILABLE_GAMES[game_name]
+    game_info = ALL_GAMES[game_name]
     game_module = game_info['module']
 
     # Add back button and auth status at the top
