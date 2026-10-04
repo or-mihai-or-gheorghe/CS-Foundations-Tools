@@ -26,7 +26,8 @@ class QuestionBank(unittest.TestCase):
         quoted = 'q4,teorie,x,"Unu, doi sau trei?",trei,unu,doi,patru,'
         for text in (BANK + quoted, "﻿" + BANK, BANK.replace(",", ";")):
             questions = quiz.parse_bank(text)
-            self.assertEqual(questions[0], {"id": "q1", "question": "Cât face 2 + 2?", "correct": "4",
+            self.assertEqual(questions[0], {"id": "q1", "type": "calcul", "topic": "entropie",
+                                            "question": "Cât face 2 + 2?", "correct": "4",
                                             "wrong": ["3", "5", "22"], "explanation": "Adunare simplă."})
         self.assertEqual(quiz.parse_bank(BANK + quoted)[-1]["question"], "Unu, doi sau trei?")
         self.assertEqual(quiz.parse_bank(BANK + quoted)[-1]["explanation"], "")
@@ -37,6 +38,7 @@ class QuestionBank(unittest.TestCase):
             BANK + ROWS[0] + "\n": "q1: id duplicat",
             BANK + "q9,x,x,Întrebare?,da,DA,nu,poate\n": "q9: variante identice",
             BANK + "q9,x,x,Întrebare?,da,,nu,poate\n": "q9: câmp gol",
+            BANK + "q.9,x,x,Întrebare?,da,nu,poate,niciodată\n": "q.9: id cu caractere nepermise",
             HEADER + "\n": "nicio întrebare",
         }
         for text, message in cases.items():
@@ -44,19 +46,34 @@ class QuestionBank(unittest.TestCase):
                 quiz.parse_bank(text)
             self.assertIn(message, str(error.exception))
 
-    def test_loads_the_local_file_then_the_secret_copy(self):
+    def load_with(self, file_text=None, stored=None, error=None):
+        """load_bank with an optional local CSV and a stubbed Firebase node"""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bank.csv"
-            path.write_text(BANK, encoding="utf-8-sig")
-            with mock.patch.object(quiz, "BANK_PATH", path), mock.patch.object(quiz, "_secret_bank", return_value=None):
-                questions, error = quiz.load_bank()
-                self.assertEqual((len(questions), error), (3, None))
+            if file_text is not None:
+                path.write_text(file_text, encoding="utf-8-sig")
+            fetch = mock.Mock(return_value=stored, side_effect=error)
+            with mock.patch.object(quiz, "BANK_PATH", path), mock.patch.object(quiz, "_fetch_bank_from_db", fetch):
+                return quiz.load_bank(), fetch
 
-            missing = Path(tmp) / "missing.csv"
-            with mock.patch.object(quiz, "BANK_PATH", missing), mock.patch.object(quiz, "_secret_bank", return_value=BANK):
-                self.assertEqual(len(quiz.load_bank()[0]), 3)
-            with mock.patch.object(quiz, "BANK_PATH", missing), mock.patch.object(quiz, "_secret_bank", return_value=None):
-                self.assertEqual(quiz.load_bank(), ([], "Banca de întrebări nu este configurată."))
+    def test_local_file_takes_precedence_over_the_database(self):
+        (questions, error), fetch = self.load_with(file_text=BANK, stored={"x": {}})
+        self.assertEqual((len(questions), error), (3, None))
+        fetch.assert_not_called()
+
+    def test_uploaded_bank_round_trips_through_the_database(self):
+        uploaded = quiz.bank_to_db(quiz.parse_bank(BANK))
+        self.assertEqual((uploaded["count"], sorted(uploaded["questions"])), (3, ["q1", "q2", "q3"]))
+        (questions, error), _ = self.load_with(stored=uploaded["questions"])
+        self.assertIsNone(error)
+        self.assertEqual(questions, quiz.parse_bank(BANK))
+
+    def test_database_problems_are_reported_not_raised(self):
+        self.assertEqual(self.load_with(stored=None)[0], ([], "Banca de întrebări nu este configurată."))
+        broken = quiz.bank_to_db(quiz.parse_bank(BANK))["questions"]
+        broken["q2"]["wrong_1"] = ""
+        self.assertIn("q2: câmp gol", self.load_with(stored=broken)[0][1])
+        self.assertEqual(self.load_with(error=ValueError("offline"))[0], ([], "Banca de întrebări nu poate fi citită."))
 
     def test_reads_excel_exports_saved_as_cp1250(self):
         excel = BANK.replace("ț", "ţ").replace("ș", "ş").replace(",", ";")  # cedilla letters, semicolons
@@ -127,8 +144,9 @@ class QuizUI(unittest.TestCase):
         self.record = mock.Mock()
         self.save = mock.Mock(return_value=True)
         # A frozen clock keeps the speed bonus deterministic; tests move start_time to end the round
-        for name, value in (("BANK_PATH", path), ("_record_game_played", self.record),
-                            ("_save_to_leaderboard", self.save), ("_now", mock.Mock(return_value=1_000_000.0))):
+        for name, value in (("BANK_PATH", path), ("_fetch_bank_from_db", mock.Mock(return_value=None)),
+                            ("_record_game_played", self.record), ("_save_to_leaderboard", self.save),
+                            ("_now", mock.Mock(return_value=1_000_000.0))):
             patcher = mock.patch.object(quiz, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)

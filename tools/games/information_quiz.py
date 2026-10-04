@@ -3,25 +3,31 @@
 import csv
 import html
 import io
+import logging
 import random
 import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import streamlit as st
 
 from .binary_speed_challenge import render_compact_timer
 from .game_utils import calculate_score
 
+logger = logging.getLogger(__name__)
+
 # Game identification constants
 GAME_SLUG = "information_quiz"
 GAME_DISPLAY_NAME = "Test grilă: Informația"
 
-# The question bank stays out of the public repository: a local CSV, or its content in Streamlit secrets
+# The question bank stays out of the public repository: the author keeps it in a local CSV and
+# uploads it to Firebase with upload_quiz_bank.py; the deployed app reads it from there
 QUESTION_BANK = "quiz_informatia"
 BANK_PATH = Path(__file__).resolve().parents[2] / "data" / f"{QUESTION_BANK}.csv"
+DB_PATH = f"quiz_banks/{QUESTION_BANK}"
+BANK_COLUMNS = ("id", "type", "topic", "question", "correct", "wrong_1", "wrong_2", "wrong_3", "explanation")
 REQUIRED_COLUMNS = ("id", "question", "correct", "wrong_1", "wrong_2", "wrong_3")
 
 DURATION = 60        # seconds per round, as in the other speed games
@@ -34,25 +40,18 @@ class QuestionBankError(ValueError):
     """The question bank is malformed."""
 
 
-def parse_bank(text: str) -> List[Dict]:
-    """Parse and validate the CSV question bank (comma or semicolon separated, optional BOM)."""
-    text = text.lstrip("﻿")
-    header = text.split("\n", 1)[0]
-    delimiter = ";" if header.count(";") > header.count(",") else ","
-    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
-
-    missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
-    if missing:
-        raise QuestionBankError(f"Banca de întrebări nu are coloanele: {', '.join(missing)}.")
-
+def validate_rows(rows: Iterable[Dict]) -> List[Dict]:
+    """Check every row (CSV line or database entry) and return the playable questions."""
     questions, problems, seen = [], [], set()
-    for line, row in enumerate(reader, start=2):
-        row = {key: (value or "").strip() for key, value in row.items() if key}
-        qid = row.get("id") or f"rândul {line}"
+    for position, row in enumerate(rows, 1):
+        row = {key: str(value or "").strip() for key, value in row.items() if key}
+        qid = row.get("id") or f"întrebarea {position}"
         options = [row.get(column, "") for column in ("correct", "wrong_1", "wrong_2", "wrong_3")]
 
         if any(not row.get(column) for column in REQUIRED_COLUMNS):
             problems.append(f"{qid}: câmp gol")
+        elif re.search(r"[.#$\[\]/]", qid):
+            problems.append(f"{qid}: id cu caractere nepermise în Firebase (. # $ [ ] /)")
         elif len({option.casefold() for option in options}) < 4:
             problems.append(f"{qid}: variante identice")
         elif qid in seen:
@@ -61,6 +60,8 @@ def parse_bank(text: str) -> List[Dict]:
             seen.add(qid)
             questions.append({
                 "id": qid,
+                "type": row.get("type", ""),
+                "topic": row.get("topic", ""),
                 "question": row["question"],
                 "correct": options[0],
                 "wrong": options[1:],
@@ -74,37 +75,82 @@ def parse_bank(text: str) -> List[Dict]:
     return questions
 
 
-def _secret_bank() -> Optional[str]:
-    """CSV content pasted into the Streamlit secrets, for deployments without the local file."""
-    try:
-        return st.secrets["quiz"]["csv"]
-    except Exception:
-        return None
+def parse_bank(text: str) -> List[Dict]:
+    """Parse and validate the CSV question bank (comma or semicolon separated, optional BOM)."""
+    text = text.lstrip("\ufeff")
+    header = text.split("\n", 1)[0]
+    delimiter = ";" if header.count(";") > header.count(",") else ","
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+    missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
+    if missing:
+        raise QuestionBankError(f"Banca de întrebări nu are coloanele: {', '.join(missing)}.")
+    return validate_rows(reader)
 
 
-def _read_bank_file() -> Optional[str]:
-    """The local CSV; Excel on Romanian Windows saves CSV files as cp1250 rather than UTF-8."""
-    if not BANK_PATH.exists():
+def read_bank_file(path: Optional[Path] = None) -> Optional[str]:
+    """The CSV text (default: BANK_PATH), or None; Excel on Romanian Windows saves CSV as cp1250, not UTF-8."""
+    path = path or BANK_PATH
+    if not path.exists():
         return None
-    data = BANK_PATH.read_bytes()
+    data = path.read_bytes()
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
         return data.decode("cp1250", errors="replace")
 
 
+def bank_to_db(questions: List[Dict]) -> Dict:
+    """The database node written by upload_quiz_bank.py: one entry per question, keyed by id."""
+    return {
+        "questions": {
+            q["id"]: {
+                "type": q["type"],
+                "topic": q["topic"],
+                "question": q["question"],
+                "correct": q["correct"],
+                "wrong_1": q["wrong"][0],
+                "wrong_2": q["wrong"][1],
+                "wrong_3": q["wrong"][2],
+                "explanation": q["explanation"],
+            }
+            for q in questions
+        },
+        "count": len(questions),
+        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+    }
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_bank_from_db() -> Optional[Dict]:
+    """The uploaded questions; cached so the Games Hub does not query Firebase on every rerun."""
+    from firebase.config import get_database_reference, is_mock_mode
+
+    if is_mock_mode():
+        return None
+    return get_database_reference(DB_PATH).child("questions").get()
+
+
 def load_bank() -> Tuple[List[Dict], Optional[str]]:
-    """Return (questions, error message); the error explains why the quiz cannot start."""
+    """Return (questions, error message); the error explains why the quiz cannot start.
+
+    A local CSV (the author's working copy) takes precedence over the bank uploaded to Firebase.
+    """
     try:
-        text = _read_bank_file() or _secret_bank()
-    except OSError:
-        return [], "Banca de întrebări nu poate fi citită."
-    if not text:
-        return [], "Banca de întrebări nu este configurată."
-    try:
-        return parse_bank(text), None
+        text = read_bank_file()
+        if text is not None:
+            return parse_bank(text), None
+
+        stored = _fetch_bank_from_db()
+        if not stored:
+            return [], "Banca de întrebări nu este configurată."
+        entries = stored.items() if isinstance(stored, dict) else enumerate(stored)
+        return validate_rows({**row, "id": str(qid)} for qid, row in entries if row), None
     except QuestionBankError as error:
         return [], str(error)
+    except Exception as error:  # unreadable file, Firebase unavailable or misconfigured
+        logger.error(f"Failed to load the quiz question bank: {error}")
+        return [], "Banca de întrebări nu poate fi citită."
 
 # ========================= Access =========================
 

@@ -70,7 +70,9 @@ Interactive timed games to practice and master binary operations with competitiv
 - **Test grilă: Informația** - Fast multiple-choice quiz, in Romanian, on information theory
   - Only for users signed in with an @ase.ro account
   - Streak multipliers, speed bonuses and a penalty for wrong answers
-  - Question bank kept out of the repository: `data/quiz_informatia.csv` locally, or the `[quiz] csv` secret on Streamlit Cloud
+  - Question bank kept out of the repository: edited in `data/quiz_informatia.csv` (gitignored), checked with
+    `python upload_quiz_bank.py --check` and uploaded to Firebase with `python upload_quiz_bank.py`;
+    keep `/quiz_banks` closed to client reads in the database rules
 
 **Leaderboard & Statistics:**
 - Sign in with @ase.ro Google account to save scores
@@ -265,6 +267,10 @@ allowed_test_emails = ["test@ase.ro", "student@ase.ro"]
     },
     "leaderboard": {
       ".read": true,
+      ".write": false
+    },
+    "quiz_banks": {
+      ".read": false,
       ".write": false
     }
   }
